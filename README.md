@@ -150,4 +150,4 @@ kika_chat/
 
 ## Licencia
 
-Este plugin se distribuye bajo licencia GNU GPL v3 o posterior. Consulta el archivo `LICENSE`.
+Este plugin se distribuye bajo licencia MIT. Consulta el archivo `LICENSE`.
