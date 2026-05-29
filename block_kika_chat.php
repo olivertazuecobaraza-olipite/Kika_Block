@@ -154,12 +154,9 @@ class block_kika_chat extends block_base {
 
                 <div class="kika-chat-main">
                     <aside id="kika_conversation_panel" class="kika-conversation-panel" aria-label="Conversaciones" hidden>
-                        <div class="kika-conversation-panel-header">
-                            <span>Conversaciones</span>
-                            <button id="kika_new_conversation" class="kika-panel-btn" type="button">Nueva</button>
-                        </div>
                         <div id="kika_conversation_status" class="kika-conversation-status"></div>
                         <div id="kika_conversation_list" class="kika-conversation-list"></div>
+                        <button id="kika_new_conversation" class="kika-panel-btn" title="Nueva conversacion" type="button" aria-label="Nueva conversacion">+</button>
                     </aside>
 
                     <div class="openai-chat-body">

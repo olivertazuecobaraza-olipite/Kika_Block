@@ -166,6 +166,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    position: relative;
 }
 
 .block_kika_chat .kika-conversation-panel[hidden] {
@@ -184,26 +185,36 @@
     font-weight: 700;
 }
 
-.block_kika_chat .kika-panel-btn,
-.block_kika_chat .kika-conversation-actions button {
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
-    border-radius: 6px;
-    padding: 4px 7px;
-    font-size: 11px;
-    line-height: 1.2;
+.block_kika_chat .kika-panel-btn {
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--chat-accent);
+    background: var(--chat-accent);
+    color: #ffffff;
+    border-radius: 999px;
+    padding: 0;
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 40px;
     cursor: pointer;
+    box-shadow: 0 12px 24px rgba(14, 165, 233, 0.28);
+    z-index: 2;
 }
 
 .block_kika_chat .kika-panel-btn:hover,
-.block_kika_chat .kika-conversation-actions button:hover {
-    background: #eef2f7;
+.block_kika_chat .kika-panel-btn:focus {
+    background: #0284c7;
+    border-color: #0284c7;
+    outline: none;
 }
 
 .block_kika_chat .kika-conversation-status {
     min-height: 18px;
-    padding: 8px 12px 0;
+    padding: 10px 12px 0;
     color: #64748b;
     font-size: 11px;
 }
@@ -212,8 +223,10 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    padding: 10px;
+    padding: 10px 10px 76px;
 }
 
 .block_kika_chat .kika-conversation-item {
@@ -221,6 +234,10 @@
     border-radius: 8px;
     background: #ffffff;
     padding: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
 }
 
 .block_kika_chat .kika-conversation-item.active {
@@ -228,19 +245,25 @@
     background: #f8fafc;
 }
 
-.block_kika_chat .kika-conversation-title {
+.block_kika_chat .kika-conversation-content {
     width: 100%;
     border: 0;
     background: transparent;
+    display: block;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.block_kika_chat .kika-conversation-title {
     color: #1e293b;
     display: block;
     font-size: 12.5px;
     font-weight: 600;
     line-height: 1.3;
     margin: 0;
-    padding: 0;
-    text-align: left;
-    cursor: pointer;
     overflow-wrap: anywhere;
 }
 
@@ -254,8 +277,47 @@
 
 .block_kika_chat .kika-conversation-actions {
     display: flex;
-    gap: 5px;
-    margin-top: 7px;
+    gap: 4px;
+    margin-top: -1px;
+    flex: 0 0 auto;
+}
+
+.block_kika_chat .kika-conversation-icon-btn {
+    width: 26px;
+    height: 26px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+.block_kika_chat .kika-conversation-icon-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+}
+
+.block_kika_chat .kika-conversation-icon-btn:hover,
+.block_kika_chat .kika-conversation-icon-btn:focus {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+    color: #1e293b;
+}
+
+.block_kika_chat .kika-conversation-icon-btn-danger:hover,
+.block_kika_chat .kika-conversation-icon-btn-danger:focus {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
 }
 
 /* Chat Log styling */

@@ -19,10 +19,19 @@ try {
         require_login();
     }
 
-    $method = $_SERVER['REQUEST_METHOD'];
+    $requestmethod = $_SERVER['REQUEST_METHOD'];
     $body = json_decode(file_get_contents('php://input'), true);
     if (!is_array($body)) {
         $body = [];
+    }
+    $action = clean_param($body['action'] ?? '', PARAM_ALPHA);
+    $method = $requestmethod;
+    if ($requestmethod === 'POST') {
+        if ($action === 'rename') {
+            $method = 'PATCH';
+        } else if ($action === 'delete') {
+            $method = 'DELETE';
+        }
     }
 
     $blockid = clean_param($body['blockId'] ?? 0, PARAM_INT);
@@ -50,7 +59,7 @@ try {
 
     if ($method === 'DELETE') {
         kika_api_request('DELETE', $path, $runtime);
-        http_response_code(204);
+        echo json_encode(['deleted' => true]);
         exit;
     }
 
