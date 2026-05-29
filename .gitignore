@@ -1,0 +1,48 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor and IDE files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+config.php
+
+# Dependencies
+node_modules/
+vendor/
+
+# Logs and runtime files
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Build and package artifacts
+dist/
+build/
+coverage/
+*.tgz
+*.zip
+
+# Moodle/PHP tooling
+.phpunit.result.cache
+phpunit.xml
+phpunit.xml.bak
+
+# Generated media and local test output
+output.mp3
+voz_generada.mp3
+*.wav
+
+# Keep Moodle AMD build files tracked when intentionally generated.
+!amd/build/
+!amd/build/**
