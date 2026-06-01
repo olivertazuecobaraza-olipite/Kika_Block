@@ -120,7 +120,7 @@ class block_kika_chat extends block_base {
                 var userName = ' . json_encode($username) . ';
             </script>
 
-            <div class="openai-chat-wrapper" data-course-id="' . s((string)$COURSE->id) . '" data-curso="' . s($curso) . '">
+            <div class="openai-chat-wrapper" data-block-id="' . (int)$this->instance->id . '" data-course-id="' . s((string)$COURSE->id) . '" data-curso="' . s($curso) . '">
                 <div class="openai-chat-header">
                     <div class="openai-chat-header-title">
                         <button id="conversation-toggle" class="header-action-btn conversation-toggle" title="Conversaciones" type="button" aria-label="Conversaciones" aria-controls="kika_conversation_panel" aria-expanded="false">

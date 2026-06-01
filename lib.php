@@ -187,11 +187,18 @@ function kika_extract_api_error($decoded, $status) {
     return get_string('kikaapigenericerror', 'block_kika_chat');
 }
 
+function kika_get_conversation_instructions($curso) {
+    return 'Eres un tutor experto y pedagogico del curso "' . $curso . '".' . "\n\n"
+        . "CONTEXTO OFICIAL DISPONIBLE:\n"
+        . '{context}';
+}
+
 function kika_create_remote_conversation(array $runtime, $title = null) {
     $body = [
         'course id' => $runtime['course_id'],
         'curso' => $runtime['curso'],
         'vs_id_QDRANT' => $runtime['vs_id_qdrant'],
+        'instructions' => kika_get_conversation_instructions($runtime['curso']),
     ];
     if ($title !== null && trim($title) !== '') {
         $body['title'] = clean_param($title, PARAM_NOTAGS);

@@ -76,6 +76,7 @@ El plugin deriva y envia los siguientes datos:
 - `course_id`: ID del curso Moodle como texto.
 - `curso`: codigo configurado en la instancia o `shortname` del curso.
 - `vs_id_QDRANT`: identificador Qdrant configurado en la instancia.
+- `instructions`: instrucciones del tutor con el curso interpolado y el marcador `{context}` para que `KIKA_API` inserte el contexto oficial recuperado.
 - `x-user-id`: identificador del usuario con formato `moodle_{USER->id}`.
 - `x-api-key`: clave configurada en Moodle. Solo se envia desde PHP.
 

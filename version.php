@@ -12,7 +12,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'block_kika_chat';
-$plugin->version = 2026052900;
+$plugin->version = 2026060100;
 $plugin->requires = 2022041600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->release = '35.0.0-kika-api';

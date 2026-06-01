@@ -9,6 +9,7 @@ let state = {
     conversationId: null,
     conversations: []
 };
+const statesByRoot = new WeakMap();
 
 const storageKey = () => `kika_active_conversation_${state.userId}_${state.courseId}_${state.blockId}`;
 
@@ -33,8 +34,19 @@ const getJson = (response) => response.text().then((text) => {
     return data;
 });
 
-const hideWelcome = (immediate = false) => {
-    const welcomeMsg = document.getElementById("welcome-message");
+const getBlockRoot = (blockId) => {
+    const wrapper = document.querySelector(`.openai-chat-wrapper[data-block-id="${blockId}"]`);
+    return wrapper ? wrapper.closest('.block_kika_chat') || wrapper : document;
+};
+
+const activateRoot = (root) => {
+    if (statesByRoot.has(root)) {
+        state = statesByRoot.get(root);
+    }
+};
+
+const hideWelcome = (immediate = false, root = document) => {
+    const welcomeMsg = root.querySelector("#welcome-message");
     if (!welcomeMsg) return;
 
     welcomeMsg.classList.add("hidden-welcome");
@@ -54,8 +66,8 @@ const hideWelcome = (immediate = false) => {
     }
 };
 
-const showWelcome = () => {
-    const welcomeMsg = document.getElementById("welcome-message");
+const showWelcome = (root = document) => {
+    const welcomeMsg = root.querySelector("#welcome-message");
     if (!welcomeMsg) return;
     welcomeMsg.classList.remove("hidden-welcome", "d-none");
     welcomeMsg.style.removeProperty("display");
@@ -66,10 +78,16 @@ const showWelcome = () => {
 };
 
 export const init = (data) => {
-    state.blockId = data.blockId;
-    state.courseId = data.courseId;
-    state.userId = data.userId;
-    state.persistConvo = data.persistConvo === "1";
+    const root = getBlockRoot(data.blockId);
+    state = {
+        blockId: data.blockId,
+        courseId: data.courseId,
+        userId: data.userId,
+        persistConvo: data.persistConvo === "1",
+        conversationId: null,
+        conversations: []
+    };
+    statesByRoot.set(root, state);
 
     if (state.persistConvo) {
         state.conversationId = localStorage.getItem(storageKey());
@@ -79,16 +97,16 @@ export const init = (data) => {
         event.stopImmediatePropagation();
     }, true);
 
-    bindInputHandlers();
-    bindHeaderHandlers();
-    initButtonHandlers();
+    bindInputHandlers(root);
+    bindHeaderHandlers(root);
+    initButtonHandlers(root);
     loadStrings();
-    refreshConversationList(true);
+    refreshConversationList(true, root);
 };
 
-const bindInputHandlers = () => {
-    const inputField = document.querySelector('#openai_input');
-    const sendButton = document.querySelector('.block_kika_chat #go');
+const bindInputHandlers = (root) => {
+    const inputField = root.querySelector('#openai_input');
+    const sendButton = root.querySelector('#go');
 
     if (inputField) {
         inputField.addEventListener('input', () => {
@@ -99,45 +117,45 @@ const bindInputHandlers = () => {
         inputField.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendCurrentInput();
+                sendCurrentInput(root);
             }
         });
     }
 
     if (sendButton) {
-        sendButton.addEventListener('click', sendCurrentInput);
+        sendButton.addEventListener('click', () => sendCurrentInput(root));
     }
 };
 
-const bindHeaderHandlers = () => {
-    const refreshBtn = document.querySelector('.block_kika_chat #refresh');
+const bindHeaderHandlers = (root) => {
+    const refreshBtn = root.querySelector('#refresh');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', startNewConversation);
+        refreshBtn.addEventListener('click', () => startNewConversation(root));
     }
 
-    const newConversationBtn = document.querySelector('.block_kika_chat #kika_new_conversation');
+    const newConversationBtn = root.querySelector('#kika_new_conversation');
     if (newConversationBtn) {
-        newConversationBtn.addEventListener('click', startNewConversation);
+        newConversationBtn.addEventListener('click', () => startNewConversation(root));
     }
 
-    const toggleBtn = document.querySelector('.block_kika_chat #conversation-toggle');
+    const toggleBtn = root.querySelector('#conversation-toggle');
     if (toggleBtn) {
-        setConversationPanelOpen(toggleBtn.getAttribute('aria-expanded') === 'true');
+        setConversationPanelOpen(toggleBtn.getAttribute('aria-expanded') === 'true', root);
         toggleBtn.addEventListener('click', () => {
-            const wrapper = document.querySelector('.block_kika_chat .openai-chat-wrapper');
+            const wrapper = root.querySelector('.openai-chat-wrapper');
             if (wrapper) {
-                setConversationPanelOpen(!wrapper.classList.contains('conversation-panel-open'));
+                setConversationPanelOpen(!wrapper.classList.contains('conversation-panel-open'), root);
             }
         });
     }
 
-    const popoutBtn = document.querySelector('.block_kika_chat #popout');
+    const popoutBtn = root.querySelector('#popout');
     if (popoutBtn) {
         popoutBtn.addEventListener('click', () => {
             if (document.querySelector('.drawer.drawer-right')) {
                 document.querySelector('.drawer.drawer-right').style.zIndex = '1041';
             }
-            const block = document.querySelector('.block_kika_chat');
+            const block = root.closest('.block_kika_chat') || root;
             if (block) {
                 block.classList.toggle('expanded');
             }
@@ -145,10 +163,10 @@ const bindHeaderHandlers = () => {
     }
 };
 
-const setConversationPanelOpen = (open) => {
-    const wrapper = document.querySelector('.block_kika_chat .openai-chat-wrapper');
-    const panel = document.querySelector('.block_kika_chat #kika_conversation_panel');
-    const toggleBtn = document.querySelector('.block_kika_chat #conversation-toggle');
+const setConversationPanelOpen = (open, root = document) => {
+    const wrapper = root.querySelector('.openai-chat-wrapper');
+    const panel = root.querySelector('#kika_conversation_panel');
+    const toggleBtn = root.querySelector('#conversation-toggle');
 
     if (wrapper) {
         wrapper.classList.toggle('conversation-panel-open', open);
@@ -174,62 +192,66 @@ const loadStrings = () => {
     });
 };
 
-const sendCurrentInput = () => {
-    const inputField = document.querySelector('#openai_input');
+const sendCurrentInput = (root = document) => {
+    activateRoot(root);
+    const inputField = root.querySelector('#openai_input');
     if (!inputField) return;
 
     const value = inputField.value.trim();
     if (value === "") return;
 
-    hideWelcome(false);
-    addToChatLog('user', escapeHtml(value));
-    createCompletion(value);
+    hideWelcome(false, root);
+    addToChatLog('user', escapeHtml(value), root);
+    createCompletion(value, root);
     inputField.value = '';
     inputField.style.height = 'auto';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
-const handleButtonClick = (buttonId, defaultMessage) => {
-    const button = document.querySelector(buttonId);
+const handleButtonClick = (buttonId, defaultMessage, root) => {
+    const button = root.querySelector(buttonId);
     if (!button) return;
 
     button.addEventListener('click', () => {
-        const inputField = document.querySelector('#openai_input');
+        const inputField = root.querySelector('#openai_input');
         if (!inputField) return;
         inputField.value = defaultMessage;
-        sendCurrentInput();
+        sendCurrentInput(root);
     });
 };
 
-const initButtonHandlers = () => {
-    handleButtonClick('#crear-examen', 'Dime que informacion necesitas que te proporcione para que me ayudes a disenar un examen');
-    handleButtonClick('#crear-resumen', 'Que informacion debo darte para que me hagas un resumen de una parte de este curso?');
-    handleButtonClick('#crear-esquema', 'Me gustaria hacer un esquema: que datos necesitas para ayudarme a hacerlo?');
-    handleButtonClick('#crear-idea', 'Necesito hacer un ejercicio o practica. Que datos necesitas para ayudarme con esto?');
+const initButtonHandlers = (root) => {
+    handleButtonClick('#crear-examen', 'Dime que informacion necesitas que te proporcione para que me ayudes a disenar un examen', root);
+    handleButtonClick('#crear-resumen', 'Que informacion debo darte para que me hagas un resumen de una parte de este curso?', root);
+    handleButtonClick('#crear-esquema', 'Me gustaria hacer un esquema: que datos necesitas para ayudarme a hacerlo?', root);
+    handleButtonClick('#crear-idea', 'Necesito hacer un ejercicio o practica. Que datos necesitas para ayudarme con esto?', root);
 };
 
-const refreshConversationList = (loadActive = false) => {
-    setConversationStatus('Cargando conversaciones...');
+const refreshConversationList = (loadActive = false, root = document) => {
+    activateRoot(root);
+    setConversationStatus('Cargando conversaciones...', root);
     fetch(apiUrl('conversations.php', {blockId: state.blockId}))
         .then(getJson)
         .then((data) => {
+            activateRoot(root);
             state.conversations = data.conversations || [];
-            renderConversationList();
-            setConversationStatus(state.conversations.length ? '' : 'No hay conversaciones todavia.');
+            renderConversationList(root);
+            setConversationStatus(state.conversations.length ? '' : 'No hay conversaciones todavia.', root);
 
             if (loadActive && state.persistConvo && state.conversationId) {
                 const exists = state.conversations.some((conversation) => conversation.conversation_id === state.conversationId);
                 if (exists) {
-                    return loadConversation(state.conversationId);
+                    return loadConversation(state.conversationId, root);
                 }
                 clearActiveConversation();
             }
         })
-        .catch((error) => setConversationStatus(error.message || errorString));
+        .catch((error) => setConversationStatus(error.message || errorString, root));
 };
 
-const renderConversationList = () => {
-    const list = document.querySelector('#kika_conversation_list');
+const renderConversationList = (root = document) => {
+    activateRoot(root);
+    const list = root.querySelector('#kika_conversation_list');
     if (!list) return;
     list.innerHTML = '';
 
@@ -241,7 +263,7 @@ const renderConversationList = () => {
         const content = document.createElement('button');
         content.className = 'kika-conversation-content';
         content.type = 'button';
-        content.addEventListener('click', () => loadConversation(conversation.conversation_id));
+        content.addEventListener('click', () => loadConversation(conversation.conversation_id, root));
 
         const title = document.createElement('span');
         title.className = 'kika-conversation-title';
@@ -261,7 +283,7 @@ const renderConversationList = () => {
         rename.title = 'Renombrar';
         rename.setAttribute('aria-label', 'Renombrar conversacion');
         rename.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-        rename.addEventListener('click', () => renameConversation(conversation));
+        rename.addEventListener('click', () => renameConversation(conversation, root));
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -269,7 +291,7 @@ const renderConversationList = () => {
         remove.title = 'Borrar';
         remove.setAttribute('aria-label', 'Borrar conversacion');
         remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
-        remove.addEventListener('click', () => deleteConversation(conversation));
+        remove.addEventListener('click', () => deleteConversation(conversation, root));
 
         actions.append(rename, remove);
         item.append(content, actions);
@@ -277,42 +299,45 @@ const renderConversationList = () => {
     });
 };
 
-const setConversationStatus = (message) => {
-    const status = document.querySelector('#kika_conversation_status');
+const setConversationStatus = (message, root = document) => {
+    const status = root.querySelector('#kika_conversation_status');
     if (status) {
         status.textContent = message;
     }
 };
 
-const loadConversation = (conversationId) => {
+const loadConversation = (conversationId, root = document) => {
+    activateRoot(root);
     if (!conversationId) return Promise.resolve();
-    setConversationStatus('Cargando mensajes...');
+    setConversationStatus('Cargando mensajes...', root);
     return fetch(apiUrl('conversation_messages.php', {blockId: state.blockId, conversation_id: conversationId}))
         .then(getJson)
         .then((data) => {
+            activateRoot(root);
             state.conversationId = data.conversation_id;
             persistActiveConversation();
-            document.querySelector('#kika_chat_log').innerHTML = '';
+            root.querySelector('#kika_chat_log').innerHTML = '';
             (data.messages || []).forEach((message) => {
-                addToChatLog(message.role === 'user' ? 'user' : 'bot', message.message);
+                addToChatLog(message.role === 'user' ? 'user' : 'bot', message.message, root);
             });
             if ((data.messages || []).length > 0) {
-                hideWelcome(true);
+                hideWelcome(true, root);
             } else {
-                showWelcome();
+                showWelcome(root);
             }
-            setConversationStatus('');
-            renderConversationList();
+            setConversationStatus('', root);
+            renderConversationList(root);
         })
-        .catch((error) => setConversationStatus(error.message || errorString));
+        .catch((error) => setConversationStatus(error.message || errorString, root));
 };
 
-const startNewConversation = () => {
+const startNewConversation = (root = document) => {
+    activateRoot(root);
     clearActiveConversation();
-    document.querySelector('#kika_chat_log').innerHTML = '';
-    showWelcome();
-    renderConversationList();
-    const input = document.querySelector('#openai_input');
+    root.querySelector('#kika_chat_log').innerHTML = '';
+    showWelcome(root);
+    renderConversationList(root);
+    const input = root.querySelector('#openai_input');
     if (input) {
         input.focus();
     }
@@ -329,7 +354,8 @@ const persistActiveConversation = () => {
     }
 };
 
-const renameConversation = (conversation) => {
+const renameConversation = (conversation, root = document) => {
+    activateRoot(root);
     const title = window.prompt('Nuevo titulo', conversation.title || '');
     if (title === null || title.trim() === '') return;
 
@@ -344,11 +370,12 @@ const renameConversation = (conversation) => {
         })
     })
         .then(getJson)
-        .then(() => refreshConversationList(false))
-        .catch((error) => setConversationStatus(error.message || errorString));
+        .then(() => refreshConversationList(false, root))
+        .catch((error) => setConversationStatus(error.message || errorString, root));
 };
 
-const deleteConversation = (conversation) => {
+const deleteConversation = (conversation, root = document) => {
+    activateRoot(root);
     if (!window.confirm('Borrar esta conversacion?')) return;
 
     fetch(apiUrl('conversation.php'), {
@@ -363,17 +390,17 @@ const deleteConversation = (conversation) => {
         .then(getJson)
         .then(() => {
             if (conversation.conversation_id === state.conversationId) {
-                startNewConversation();
+                startNewConversation(root);
             }
-            return refreshConversationList(false);
+            return refreshConversationList(false, root);
         })
-        .catch((error) => setConversationStatus(error.message || errorString));
+        .catch((error) => setConversationStatus(error.message || errorString, root));
 };
 
-const addToChatLog = (type, message) => {
-    hideWelcome(true);
+const addToChatLog = (type, message, root = document) => {
+    hideWelcome(true, root);
     setTimeout(() => {
-        let messageContainer = document.querySelector('#kika_chat_log');
+        let messageContainer = root.querySelector('#kika_chat_log');
         if (!messageContainer) return;
 
         const messageElem = document.createElement('div');
@@ -419,9 +446,10 @@ const appendBubble = (messageElem, message) => {
     messageElem.appendChild(bubble);
 };
 
-const createCompletion = (message) => {
-    const controlBar = document.querySelector('.block_kika_chat #control_bar');
-    const input = document.querySelector('#openai_input');
+const createCompletion = (message, root = document) => {
+    activateRoot(root);
+    const controlBar = root.querySelector('#control_bar');
+    const input = root.querySelector('#openai_input');
     if (controlBar) {
         controlBar.classList.add('disabled');
     }
@@ -432,7 +460,7 @@ const createCompletion = (message) => {
         input.placeholder = questionString;
         input.blur();
     }
-    addToChatLog('bot loading', '');
+    addToChatLog('bot loading', '', root);
 
     fetch(apiUrl('completion.php'), {
         method: 'POST',
@@ -444,23 +472,24 @@ const createCompletion = (message) => {
         })
     })
         .then((response) => {
-            removeLoadingMessage();
+            removeLoadingMessage(root);
             if (controlBar) {
                 controlBar.classList.remove('disabled');
             }
             return getJson(response);
         })
         .then((data) => {
+            activateRoot(root);
             state.conversationId = data.conversation_id;
             persistActiveConversation();
-            addToChatLog('bot', data.message);
-            refreshConversationList(false);
+            addToChatLog('bot', data.message, root);
+            refreshConversationList(false, root);
             if (input) {
                 input.focus();
             }
         })
         .catch((error) => {
-            removeLoadingMessage();
+            removeLoadingMessage(root);
             if (controlBar) {
                 controlBar.classList.remove('disabled');
             }
@@ -471,8 +500,8 @@ const createCompletion = (message) => {
         });
 };
 
-const removeLoadingMessage = () => {
-    let messageContainer = document.querySelector('#kika_chat_log');
+const removeLoadingMessage = (root = document) => {
+    let messageContainer = root.querySelector('#kika_chat_log');
     if (messageContainer && messageContainer.lastElementChild && messageContainer.lastElementChild.classList.contains('loading')) {
         messageContainer.removeChild(messageContainer.lastElementChild);
     }
