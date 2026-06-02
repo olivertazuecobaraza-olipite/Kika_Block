@@ -606,6 +606,7 @@
 .block_kika_chat .openai-add-btn {
     background: none !important;
     border: none !important;
+    border-radius: 6px;
     padding: 4px !important;
     margin: 0 !important;
     color: #64748b !important;
@@ -619,6 +620,10 @@
 
 .block_kika_chat .openai-add-btn:hover {
     color: #1e293b !important;
+}
+
+.block_kika_chat .openai-add-btn:focus-within {
+    box-shadow: 0 0 0 2px rgba(46, 65, 102, 0.2);
 }
 
 .block_kika_chat .input-btn-icon {
@@ -650,6 +655,33 @@
 .block_kika_chat #openai_input.error {
     border: none !important;
     color: #ef4444 !important;
+}
+
+.block_kika_chat .kika-web-search-toggle {
+    display: flex;
+}
+
+.block_kika_chat .kika-web-search-toggle input {
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    width: 1px;
+}
+
+.block_kika_chat .kika-web-search-icon {
+    display: flex;
+}
+
+.block_kika_chat .kika-web-search-toggle input:checked + .kika-web-search-icon {
+    color: #2563eb;
+}
+
+.block_kika_chat .kika-web-search-info {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    gap: 3px;
+    margin: 4px 0 0 44px;
 }
 
 .block_kika_chat .openai-submit-btn {

@@ -15,10 +15,6 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
 try {
-    if (get_config('block_kika_chat', 'restrictusage') !== "0") {
-        require_login();
-    }
-
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         http_response_code(405);
         echo json_encode(['error' => get_string('methodnotallowed', 'block_kika_chat')]);
@@ -35,6 +31,7 @@ try {
     $message = clean_param($body['message'] ?? '', PARAM_NOTAGS);
     $blockid = clean_param($body['blockId'] ?? 0, PARAM_INT);
     $conversationid = clean_param($body['conversationId'] ?? '', PARAM_ALPHANUMEXT);
+    $websearch = !empty($body['web_search']);
 
     if (trim($message) === '') {
         http_response_code(400);
@@ -43,6 +40,7 @@ try {
     }
 
     $runtime = kika_prepare_ajax_runtime($blockid);
+    require_sesskey();
 
     if (class_exists('\\core\\session\\manager')) {
         \core\session\manager::write_close();
@@ -59,23 +57,23 @@ try {
 
     $response = kika_api_request(
         'POST',
-        '/api/tutor/conversations/' . rawurlencode($conversationid) . '/messages',
+        '/conversations/' . rawurlencode($conversationid) . '/messages',
         $runtime,
-        ['prompt' => $message]
+        ['prompt' => $message, 'web_search' => $websearch]
     );
 
     $answer = $response['respuesta'] ?? '';
-    $answer = format_text($answer, FORMAT_HTML, ['context' => $runtime['context']]);
+    $answer = kika_sanitise_remote_html($answer, $runtime['context']);
+    $sources = kika_sanitise_sources($response['sources'] ?? $response['fuentes'] ?? []);
 
     kika_log_message($message, $answer, $runtime['context']);
 
     echo json_encode([
         'conversation_id' => $response['conversation_id'] ?? $conversationid,
         'message' => $answer,
+        'web_search_used' => !empty($response['web_search_used']) || !empty($sources),
+        'sources' => $sources,
     ]);
 } catch (Throwable $e) {
-    $code = (int)$e->getCode();
-    http_response_code($code >= 400 && $code <= 599 ? $code : 500);
-    $detail = property_exists($e, 'debuginfo') && !empty($e->debuginfo) ? $e->debuginfo : $e->getMessage();
-    echo json_encode(['error' => $detail]);
+    kika_send_json_error($e);
 }

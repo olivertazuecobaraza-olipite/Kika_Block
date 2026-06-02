@@ -15,10 +15,6 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
 try {
-    if (get_config('block_kika_chat', 'restrictusage') !== "0") {
-        require_login();
-    }
-
     $requestmethod = $_SERVER['REQUEST_METHOD'];
     $body = json_decode(file_get_contents('php://input'), true);
     if (!is_array($body)) {
@@ -43,17 +39,18 @@ try {
     }
 
     $runtime = kika_prepare_ajax_runtime($blockid);
+    require_sesskey();
 
     if (class_exists('\\core\\session\\manager')) {
         \core\session\manager::write_close();
     }
 
-    $path = '/api/tutor/conversations/' . rawurlencode($conversationid);
+    $path = '/conversations/' . rawurlencode($conversationid);
 
     if ($method === 'PATCH') {
         $title = clean_param($body['title'] ?? '', PARAM_NOTAGS);
         $response = kika_api_request('PATCH', $path, $runtime, ['title' => $title]);
-        echo json_encode($response);
+        echo json_encode(kika_sanitise_conversation($response));
         exit;
     }
 
@@ -66,8 +63,5 @@ try {
     http_response_code(405);
     echo json_encode(['error' => get_string('methodnotallowed', 'block_kika_chat')]);
 } catch (Throwable $e) {
-    $code = (int)$e->getCode();
-    http_response_code($code >= 400 && $code <= 599 ? $code : 500);
-    $detail = property_exists($e, 'debuginfo') && !empty($e->debuginfo) ? $e->debuginfo : $e->getMessage();
-    echo json_encode(['error' => $detail]);
+    kika_send_json_error($e);
 }

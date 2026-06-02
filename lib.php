@@ -26,7 +26,7 @@ function kika_is_valid_api_identifier($value, $maxlength = 64) {
 
 function kika_get_user_api_id() {
     global $USER;
-    return 'moodle_' . (int)$USER->id;
+    return (string)(int)$USER->id;
 }
 
 function kika_get_block_runtime($blockid) {
@@ -80,6 +80,12 @@ function kika_prepare_ajax_runtime($blockid) {
 
     $runtime = kika_get_block_runtime($blockid);
     $PAGE->set_context($runtime['context']);
+    if ($runtime['course']) {
+        require_login($runtime['course']);
+    } else {
+        require_login();
+    }
+    validate_context($runtime['context']);
     return $runtime;
 }
 
@@ -98,24 +104,70 @@ function kika_validate_runtime(array $runtime) {
     }
 }
 
+function kika_get_server_value($name) {
+    $value = getenv($name);
+    if ($value === false && defined($name)) {
+        $value = constant($name);
+    }
+    if (($value === false || trim((string)$value) === '') && $name === 'KIKA_API_URL') {
+        $value = get_config('block_kika_chat', 'kika_api_url');
+    }
+    if (($value === false || trim((string)$value) === '') && $name === 'KIKA_API_TOKEN') {
+        $value = get_config('block_kika_chat', 'kika_api_token');
+    }
+    return trim((string)$value);
+}
+
 function kika_get_api_base_url() {
-    $baseurl = trim((string)get_config('block_kika_chat', 'kika_api_base_url'));
+    $baseurl = kika_get_server_value('KIKA_API_URL');
     if ($baseurl === '') {
         throw new moodle_exception('missingkikaapiurl', 'block_kika_chat');
+    }
+
+    $parts = parse_url($baseurl);
+    $host = core_text::strtolower($parts['host'] ?? '');
+    $islocal = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    if (!filter_var($baseurl, FILTER_VALIDATE_URL) || (($parts['scheme'] ?? '') !== 'https' && !$islocal)) {
+        throw new moodle_exception('invalidkikaapiurl', 'block_kika_chat');
     }
     return rtrim($baseurl, '/');
 }
 
-function kika_get_api_key() {
-    $apikey = trim((string)get_config('block_kika_chat', 'kika_api_key'));
-    if ($apikey === '') {
-        throw new moodle_exception('missingkikaapikey', 'block_kika_chat');
+function kika_get_api_token() {
+    $token = kika_get_server_value('KIKA_API_TOKEN');
+    if ($token === '') {
+        throw new moodle_exception('missingkikaapitoken', 'block_kika_chat');
     }
-    return $apikey;
+    return $token;
+}
+
+function kika_is_server_configured() {
+    return kika_get_server_value('KIKA_API_URL') !== '' && kika_get_server_value('KIKA_API_TOKEN') !== '';
+}
+
+function kika_log_api_event(array $runtime, $action, $status, $code, $startedat) {
+    $event = [
+        'component' => 'block_kika_chat',
+        'user_id' => $runtime['user_api_id'],
+        'course_id' => $runtime['course_id'],
+        'action' => $action,
+        'http_status' => (int)$status,
+        'code' => $code,
+        'duration_ms' => (int)round((microtime(true) - $startedat) * 1000),
+    ];
+    error_log(json_encode($event));
 }
 
 function kika_api_request($method, $path, array $runtime, $body = null, array $query = []) {
-    $url = kika_get_api_base_url() . $path;
+    $startedat = microtime(true);
+    $action = strtoupper($method) . ' ' . $path;
+    try {
+        $url = kika_get_api_base_url() . $path;
+        $token = kika_get_api_token();
+    } catch (Throwable $exception) {
+        kika_log_api_event($runtime, $action, 500, 'block_kika_missing_server_config', $startedat);
+        throw $exception;
+    }
     if (!empty($query)) {
         $url .= '?' . http_build_query($query);
     }
@@ -123,7 +175,7 @@ function kika_api_request($method, $path, array $runtime, $body = null, array $q
     $headers = [
         'Content-Type: application/json',
         'Accept: application/json',
-        'x-api-key: ' . kika_get_api_key(),
+        'Authorization: Bearer ' . $token,
         'x-user-id: ' . $runtime['user_api_id'],
     ];
 
@@ -132,8 +184,8 @@ function kika_api_request($method, $path, array $runtime, $body = null, array $q
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => strtoupper($method),
         CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 45,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 90,
     ]);
 
     if ($body !== null) {
@@ -142,49 +194,101 @@ function kika_api_request($method, $path, array $runtime, $body = null, array $q
 
     $raw = curl_exec($ch);
     $errno = curl_errno($ch);
-    $error = curl_error($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
     if ($errno) {
-        throw new Exception($error ?: get_string('kikaapiconnectionerror', 'block_kika_chat'), 502);
+        $istimeout = defined('CURLE_OPERATION_TIMEDOUT') && $errno === CURLE_OPERATION_TIMEDOUT;
+        kika_log_api_event($runtime, $action, $istimeout ? 504 : 503, $istimeout ? 'block_kika_api_timeout' : 'block_kika_api_unavailable', $startedat);
+        throw new Exception(
+            get_string($istimeout ? 'kikaapitimeout' : 'kikaapiunavailable', 'block_kika_chat'),
+            $istimeout ? 504 : 503
+        );
     }
 
     $decoded = null;
     if ($raw !== false && $raw !== '') {
         $decoded = json_decode($raw, true);
         if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+            kika_log_api_event($runtime, $action, 502, 'block_kika_invalid_response', $startedat);
             throw new Exception(get_string('kikaapiinvalidjson', 'block_kika_chat'), 502);
         }
     }
 
     if ($status >= 400) {
-        $message = kika_extract_api_error($decoded, $status);
-        throw new Exception($message, $status);
+        $code = $status === 401 ? 'block_kika_license_auth_failed' : 'block_kika_api_error';
+        kika_log_api_event($runtime, $action, $status, $code, $startedat);
+        throw new Exception(kika_get_public_api_error($status), $status);
     }
 
+    kika_log_api_event($runtime, $action, $status, 'ok', $startedat);
     return $decoded ?: [];
 }
 
-function kika_extract_api_error($decoded, $status) {
-    if (is_array($decoded)) {
-        if (!empty($decoded['error'])) {
-            return is_string($decoded['error']) ? $decoded['error'] : json_encode($decoded['error']);
+function kika_get_public_api_error($status) {
+    $strings = [
+        400 => 'kikaapibadrequest',
+        401 => 'kikaapiunauthorized',
+        404 => 'kikaconversationnotfound',
+        429 => 'kikaapiratelimited',
+        500 => 'kikaapiresponsefailed',
+        503 => 'kikaapiunavailable',
+        504 => 'kikaapitimeout',
+    ];
+    return get_string($strings[$status] ?? 'kikaapigenericerror', 'block_kika_chat');
+}
+
+function kika_sanitise_remote_html($html, context $context) {
+    return format_text(clean_text((string)$html, FORMAT_HTML), FORMAT_HTML, ['context' => $context]);
+}
+
+function kika_sanitise_sources($sources) {
+    $clean = [];
+    foreach (is_array($sources) ? $sources : [] as $source) {
+        if (!is_array($source)) {
+            continue;
         }
-        if (!empty($decoded['errors']) && is_array($decoded['errors'])) {
-            $messages = array_map(function($error) {
-                return is_array($error) && !empty($error['message']) ? $error['message'] : json_encode($error);
-            }, $decoded['errors']);
-            return implode(' ', $messages);
+        $url = clean_param($source['url'] ?? '', PARAM_URL);
+        $scheme = core_text::strtolower((string)parse_url($url, PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            continue;
+        }
+        $clean[] = [
+            'url' => $url,
+            'title' => clean_param($source['title'] ?? $url, PARAM_TEXT),
+            'date' => clean_param($source['date'] ?? '', PARAM_TEXT),
+        ];
+    }
+    return $clean;
+}
+
+function kika_sanitise_conversation($conversation) {
+    if (!is_array($conversation)) {
+        return [];
+    }
+    return [
+        'conversation_id' => clean_param($conversation['conversation_id'] ?? '', PARAM_ALPHANUMEXT),
+        'title' => clean_param($conversation['title'] ?? '', PARAM_TEXT),
+        'last_message_at' => clean_param($conversation['last_message_at'] ?? '', PARAM_TEXT),
+    ];
+}
+
+function kika_sanitise_conversation_list($response) {
+    $conversations = [];
+    foreach (is_array($response['conversations'] ?? null) ? $response['conversations'] : [] as $conversation) {
+        $clean = kika_sanitise_conversation($conversation);
+        if ($clean['conversation_id'] !== '') {
+            $conversations[] = $clean;
         }
     }
-    if ($status === 401) {
-        return get_string('kikaapiunauthorized', 'block_kika_chat');
-    }
-    if ($status === 404) {
-        return get_string('kikaconversationnotfound', 'block_kika_chat');
-    }
-    return get_string('kikaapigenericerror', 'block_kika_chat');
+    return ['conversations' => $conversations];
+}
+
+function kika_send_json_error(Throwable $exception) {
+    $code = (int)$exception->getCode();
+    $status = $code >= 400 && $code <= 599 ? $code : 500;
+    http_response_code($status);
+    echo json_encode(['error' => kika_get_public_api_error($status)]);
 }
 
 function kika_get_conversation_instructions($curso) {
@@ -203,7 +307,7 @@ function kika_create_remote_conversation(array $runtime, $title = null) {
     if ($title !== null && trim($title) !== '') {
         $body['title'] = clean_param($title, PARAM_NOTAGS);
     }
-    return kika_api_request('POST', '/api/tutor/conversations', $runtime, $body);
+    return kika_api_request('POST', '/conversations', $runtime, $body);
 }
 
 /**

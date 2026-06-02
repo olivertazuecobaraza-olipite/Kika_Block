@@ -16,26 +16,29 @@ if ($hassiteconfig) {
     ));
 
     if ($ADMIN->fulltree) {
+        require_once($CFG->dirroot . '/blocks/kika_chat/lib.php');
         $settings->add(new admin_setting_configtext(
-            'block_kika_chat/kika_api_base_url',
-            get_string('kika_api_base_url', 'block_kika_chat'),
-            get_string('kika_api_base_urldesc', 'block_kika_chat'),
-            'http://localhost:3000',
+            'block_kika_chat/kika_api_url',
+            get_string('kika_api_url', 'block_kika_chat'),
+            get_string('kika_api_urldesc', 'block_kika_chat'),
+            '',
             PARAM_URL
         ));
 
         $settings->add(new admin_setting_configpasswordunmask(
-            'block_kika_chat/kika_api_key',
-            get_string('kika_api_key', 'block_kika_chat'),
-            get_string('kika_api_keydesc', 'block_kika_chat'),
+            'block_kika_chat/kika_api_token',
+            get_string('kika_api_token', 'block_kika_chat'),
+            get_string('kika_api_tokendesc', 'block_kika_chat'),
             ''
         ));
 
-        $settings->add(new admin_setting_configcheckbox(
-            'block_kika_chat/restrictusage',
-            get_string('restrictusage', 'block_kika_chat'),
-            get_string('restrictusagedesc', 'block_kika_chat'),
-            1
+        $licensestatus = kika_is_server_configured()
+            ? get_string('yes')
+            : get_string('no');
+        $settings->add(new admin_setting_description(
+            'block_kika_chat/kika_api_license_status',
+            get_string('kika_api_license_status', 'block_kika_chat'),
+            $licensestatus
         ));
 
         $settings->add(new admin_setting_configtext(

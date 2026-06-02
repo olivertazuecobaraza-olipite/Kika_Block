@@ -46,6 +46,17 @@ class report extends \table_sql {
         }
     }
 
+    function col_usermessage($values) {
+        return s($values->usermessage);
+    }
+
+    function col_airesponse($values) {
+        if ($this->is_downloading()) {
+            return strip_tags($values->airesponse);
+        }
+        return clean_text($values->airesponse, FORMAT_HTML);
+    }
+
     function col_timecreated($values) {
         if ($this->is_downloading()) {
             return $values->timecreated;

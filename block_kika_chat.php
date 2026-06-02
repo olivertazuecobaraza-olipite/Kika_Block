@@ -5,6 +5,8 @@
  * @package block_kika_chat
  */
 
+require_once(__DIR__ . '/lib.php');
+
 class block_kika_chat extends block_base {
     public function init() {
         $this->title = get_string('kika_chat', 'block_kika_chat');
@@ -58,16 +60,13 @@ class block_kika_chat extends block_base {
         $this->page->requires->js_call_amd('block_kika_chat/lib', 'init', [[
             'blockId' => $this->instance->id,
             'courseId' => (string)$COURSE->id,
-            'userId' => 'moodle_' . (int)$USER->id,
+            'userId' => (string)(int)$USER->id,
             'persistConvo' => $persistconvo ? '1' : '0',
         ]]);
 
         $missing = [];
-        if (trim((string)get_config('block_kika_chat', 'kika_api_base_url')) === '') {
-            $missing[] = get_string('kika_api_base_url', 'block_kika_chat');
-        }
-        if (trim((string)get_config('block_kika_chat', 'kika_api_key')) === '') {
-            $missing[] = get_string('kika_api_key', 'block_kika_chat');
+        if (!kika_is_server_configured()) {
+            $missing[] = get_string('kika_api_server_config', 'block_kika_chat');
         }
         if ($vsid === '') {
             $missing[] = get_string('vs_id_qdrant', 'block_kika_chat');

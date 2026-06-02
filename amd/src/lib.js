@@ -7,7 +7,8 @@ let state = {
     userId: null,
     persistConvo: true,
     conversationId: null,
-    conversations: []
+    conversations: [],
+    sending: false
 };
 const statesByRoot = new WeakMap();
 
@@ -15,6 +16,7 @@ const storageKey = () => `kika_active_conversation_${state.userId}_${state.cours
 
 const apiUrl = (path, params = {}) => {
     const url = new URL(`${M.cfg.wwwroot}/blocks/kika_chat/api/${path}`, window.location.origin);
+    url.searchParams.set('sesskey', M.cfg.sesskey);
     Object.keys(params).forEach((key) => url.searchParams.set(key, params[key]));
     return url.toString();
 };
@@ -24,8 +26,7 @@ const getJson = (response) => response.text().then((text) => {
     try {
         data = text ? JSON.parse(text) : {};
     } catch (error) {
-        const detail = text ? ` Respuesta: ${text.slice(0, 120)}` : '';
-        throw new Error(`La respuesta del servidor no es JSON (HTTP ${response.status}).${detail}`);
+        throw new Error(`La respuesta del servidor no es JSON (HTTP ${response.status}).`);
     }
 
     if (!response.ok) {
@@ -85,7 +86,8 @@ export const init = (data) => {
         userId: data.userId,
         persistConvo: data.persistConvo === "1",
         conversationId: null,
-        conversations: []
+        conversations: [],
+        sending: false
     };
     statesByRoot.set(root, state);
 
@@ -198,13 +200,18 @@ const sendCurrentInput = (root = document) => {
     if (!inputField) return;
 
     const value = inputField.value.trim();
-    if (value === "") return;
+    if (value === "" || state.sending) return;
+    const webSearch = root.querySelector('#kika_web_search');
+    const useWebSearch = webSearch ? webSearch.checked : false;
 
     hideWelcome(false, root);
     addToChatLog('user', escapeHtml(value), root);
-    createCompletion(value, root);
+    createCompletion(value, useWebSearch, root);
     inputField.value = '';
     inputField.style.height = 'auto';
+    if (webSearch) {
+        webSearch.checked = false;
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
@@ -318,7 +325,7 @@ const loadConversation = (conversationId, root = document) => {
             persistActiveConversation();
             root.querySelector('#kika_chat_log').innerHTML = '';
             (data.messages || []).forEach((message) => {
-                addToChatLog(message.role === 'user' ? 'user' : 'bot', message.message, root);
+                addToChatLog(message.role === 'user' ? 'user' : 'bot', message.message, root, message);
             });
             if ((data.messages || []).length > 0) {
                 hideWelcome(true, root);
@@ -397,7 +404,7 @@ const deleteConversation = (conversation, root = document) => {
         .catch((error) => setConversationStatus(error.message || errorString, root));
 };
 
-const addToChatLog = (type, message, root = document) => {
+const addToChatLog = (type, message, root = document, metadata = {}) => {
     hideWelcome(true, root);
     setTimeout(() => {
         let messageContainer = root.querySelector('#kika_chat_log');
@@ -430,6 +437,7 @@ const addToChatLog = (type, message, root = document) => {
             `;
             messageElem.appendChild(headerElem);
             appendBubble(messageElem, message);
+            appendWebSearchMetadata(messageElem, metadata);
         } else {
             appendBubble(messageElem, message);
         }
@@ -439,6 +447,31 @@ const addToChatLog = (type, message, root = document) => {
     }, 100);
 };
 
+const appendWebSearchMetadata = (messageElem, metadata) => {
+    if (!metadata.web_search_used && !(metadata.sources || []).length) return;
+
+    const info = document.createElement('div');
+    info.className = 'kika-web-search-info';
+    if (metadata.web_search_used) {
+        const label = document.createElement('div');
+        label.textContent = 'Respuesta con busqueda web';
+        info.appendChild(label);
+    }
+
+    (metadata.sources || []).forEach((source) => {
+        const link = document.createElement('a');
+        link.href = source.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = source.title || source.url;
+        if (source.date) {
+            link.textContent += ` (${source.date})`;
+        }
+        info.appendChild(link);
+    });
+    messageElem.appendChild(info);
+};
+
 const appendBubble = (messageElem, message) => {
     const bubble = document.createElement('div');
     bubble.classList.add('openai-message-bubble');
@@ -446,8 +479,10 @@ const appendBubble = (messageElem, message) => {
     messageElem.appendChild(bubble);
 };
 
-const createCompletion = (message, root = document) => {
+const createCompletion = (message, webSearch = false, root = document) => {
     activateRoot(root);
+    if (state.sending) return;
+    state.sending = true;
     const controlBar = root.querySelector('#control_bar');
     const input = root.querySelector('#openai_input');
     if (controlBar) {
@@ -468,7 +503,8 @@ const createCompletion = (message, root = document) => {
         body: JSON.stringify({
             message: message,
             blockId: state.blockId,
-            conversationId: state.conversationId
+            conversationId: state.conversationId,
+            web_search: webSearch
         })
     })
         .then((response) => {
@@ -476,13 +512,14 @@ const createCompletion = (message, root = document) => {
             if (controlBar) {
                 controlBar.classList.remove('disabled');
             }
+            state.sending = false;
             return getJson(response);
         })
         .then((data) => {
             activateRoot(root);
             state.conversationId = data.conversation_id;
             persistActiveConversation();
-            addToChatLog('bot', data.message, root);
+            addToChatLog('bot', data.message, root, data);
             refreshConversationList(false, root);
             if (input) {
                 input.focus();
@@ -493,6 +530,7 @@ const createCompletion = (message, root = document) => {
             if (controlBar) {
                 controlBar.classList.remove('disabled');
             }
+            state.sending = false;
             if (input) {
                 input.classList.add('error');
                 input.placeholder = error.message || errorString;

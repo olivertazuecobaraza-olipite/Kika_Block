@@ -62,23 +62,29 @@ if (!$table->is_downloading()) {
 }
 
 $where = "1=1";
+$params = [];
 $out = 10;
 
 // If courseid is 1, we're assuming this is an admin report wanting the entire log table
 // otherwise, we'll limit it to responses in the course context for this course
 if ($courseid !== 1) {
-    $where = "c.contextlevel = 50 AND co.id = $courseid";
+    $where = "c.contextlevel = :contextlevel AND co.id = :courseid";
+    $params['contextlevel'] = CONTEXT_COURSE;
+    $params['courseid'] = $courseid;
 }
 
 // filter by user, starttime, endtime
 if ($user) {
-    $where .= " AND CONCAT(u.firstname, ' ', u.lastname) like '%$user%'";
+    $where .= " AND " . $DB->sql_like("CONCAT(u.firstname, ' ', u.lastname)", ':username', false);
+    $params['username'] = '%' . $DB->sql_like_escape($user) . '%';
 }
 if ($starttime_ts) {
-    $where .= " AND ocl.timecreated > $starttime_ts";
+    $where .= " AND ocl.timecreated > :starttime";
+    $params['starttime'] = $starttime_ts;
 }
 if ($endtime_ts) {
-    $where .= " AND ocl.timecreated < $endtime_ts";
+    $where .= " AND ocl.timecreated < :endtime";
+    $params['endtime'] = $endtime_ts;
 }
 
 $table->set_sql(
@@ -87,7 +93,8 @@ $table->set_sql(
         JOIN {user} u ON u.id = ocl.userid 
         JOIN {context} c ON c.id = ocl.contextid
         LEFT JOIN {course} co ON co.id = c.instanceid",
-    $where
+    $where,
+    $params
 );
 $table->define_baseurl($pageurl);
 $table->out($out, true);

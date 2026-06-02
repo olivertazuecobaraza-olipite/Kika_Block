@@ -52,8 +52,8 @@ if ($records) {
     foreach ($records as $record) {
         echo '<tr>';
         echo '<td>' . userdate($record->timecreated) . '</td>';
-        echo '<td>' . $record->usermessage . '</td>'; // HTML renderizado
-        echo '<td>' . $record->airesponse . '</td>';  // HTML renderizado
+        echo '<td>' . s($record->usermessage) . '</td>';
+        echo '<td>' . clean_text($record->airesponse, FORMAT_HTML) . '</td>';
         echo '</tr>';
     }
 

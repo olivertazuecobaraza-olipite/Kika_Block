@@ -15,10 +15,6 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
 try {
-    if (get_config('block_kika_chat', 'restrictusage') !== "0") {
-        require_login();
-    }
-
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
         http_response_code(405);
         echo json_encode(['error' => get_string('methodnotallowed', 'block_kika_chat')]);
@@ -28,6 +24,7 @@ try {
     $blockid = required_param('blockId', PARAM_INT);
     $conversationid = required_param('conversation_id', PARAM_ALPHANUMEXT);
     $runtime = kika_prepare_ajax_runtime($blockid);
+    require_sesskey();
 
     if (class_exists('\\core\\session\\manager')) {
         \core\session\manager::write_close();
@@ -35,16 +32,21 @@ try {
 
     $response = kika_api_request(
         'GET',
-        '/api/tutor/conversations/' . rawurlencode($conversationid) . '/messages',
+        '/conversations/' . rawurlencode($conversationid) . '/messages',
         $runtime
     );
 
     $messages = [];
     foreach (($response['messages'] ?? []) as $message) {
+        $role = ($message['role'] ?? '') === 'user' ? 'user' : 'assistant';
         $messages[] = [
-            'role' => $message['role'] ?? '',
-            'message' => format_text($message['content'] ?? '', FORMAT_HTML, ['context' => $runtime['context']]),
+            'role' => $role,
+            'message' => $role === 'user'
+                ? s($message['content'] ?? '')
+                : kika_sanitise_remote_html($message['content'] ?? '', $runtime['context']),
             'created_at' => $message['created_at'] ?? null,
+            'web_search_used' => !empty($message['web_search_used']),
+            'sources' => kika_sanitise_sources($message['sources'] ?? $message['fuentes'] ?? []),
         ];
     }
 
@@ -53,8 +55,5 @@ try {
         'messages' => $messages,
     ]);
 } catch (Throwable $e) {
-    $code = (int)$e->getCode();
-    http_response_code($code >= 400 && $code <= 599 ? $code : 500);
-    $detail = property_exists($e, 'debuginfo') && !empty($e->debuginfo) ? $e->debuginfo : $e->getMessage();
-    echo json_encode(['error' => $detail]);
+    kika_send_json_error($e);
 }

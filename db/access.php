@@ -47,4 +47,14 @@ $capabilities = array(
         ),
         'clonepermissionsfrom' => 'coursereport/participation:view',
     ),
+
+    'block/kika_chat:configure' => array(
+        'riskbitmask' => RISK_CONFIG,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_BLOCK,
+        'archetypes' => array(
+            'manager' => CAP_ALLOW
+        ),
+        'clonepermissionsfrom' => 'moodle/site:config',
+    ),
 );

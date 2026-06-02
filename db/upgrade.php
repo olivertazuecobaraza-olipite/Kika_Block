@@ -35,6 +35,18 @@ function xmldb_block_kika_chat_upgrade($oldversion): bool {
         upgrade_block_savepoint(true, 2024040401, 'kika_chat');
     }
 
+    if ($oldversion < 2026060200) {
+        unset_config('kika_api_key', 'block_kika_chat');
+        unset_config('kika_api_base_url', 'block_kika_chat');
+        unset_config('restrictusage', 'block_kika_chat');
+
+        upgrade_block_savepoint(true, 2026060200, 'kika_chat');
+    }
+
+    if ($oldversion < 2026060201) {
+        upgrade_block_savepoint(true, 2026060201, 'kika_chat');
+    }
+
     // Everything has succeeded to here. Return true.
     return true;
 }
