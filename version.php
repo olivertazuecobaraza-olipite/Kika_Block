@@ -12,8 +12,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'block_kika_chat';
-$plugin->version = 2026060201;
+$plugin->version = 2026060204;
 $plugin->requires = 2022041600;
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '36.0.1-kika-jwt-admin-settings';
+$plugin->release = '36.0.4-kika-visible-errors-everywhere';
 ?>

@@ -49,6 +49,11 @@ try {
 
     if ($method === 'PATCH') {
         $title = clean_param($body['title'] ?? '', PARAM_NOTAGS);
+        if (trim($title) === '') {
+            http_response_code(400);
+            echo json_encode(['error' => get_string('kikaapibadrequest', 'block_kika_chat')]);
+            exit;
+        }
         $response = kika_api_request('PATCH', $path, $runtime, ['title' => $title]);
         echo json_encode(kika_sanitise_conversation($response));
         exit;

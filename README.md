@@ -66,6 +66,8 @@ KIKA_API_TOKEN=<jwt_comercial>
 
 Estas tienen prioridad sobre los valores editables. Para instalaciones con requisitos de seguridad estrictos, usa esta alternativa: los valores editables se guardan en la configuracion global de Moodle. Nunca guardes el JWT en JavaScript, HTML, logs ni Git.
 
+La URL configurada debe ser la URL real accesible desde el servidor Moodle y debe incluir el prefijo `/api/tutor`. `localhost` solo es valido si el backend corre en el mismo servidor que Moodle durante desarrollo. El token legacy `api_key` no se usa: todas las llamadas externas se autorizan con `Authorization: Bearer <JWT>`.
+
 ## Configuracion del bloque en un curso
 
 Al agregar el bloque a un curso, cada instancia debe definir:
@@ -98,7 +100,7 @@ El navegador llama a endpoints locales del plugin:
 - `api/conversation_messages.php`: carga los mensajes de una conversacion.
 - `api/conversation.php`: renombra o elimina una conversacion.
 
-Estos endpoints validan sesion, curso, contexto y `sesskey`, y actuan como proxy hacia `KIKA_API`. Suponiendo que `KIKA_API_URL` termina en `/api/tutor`, llaman a:
+Estos endpoints establecen el contexto de pagina, validan la sesion mediante `require_login()`, validan curso y `sesskey`, y actuan como proxy hacia `KIKA_API`. No exponen el JWT al navegador. Suponiendo que `KIKA_API_URL` termina en `/api/tutor`, llaman a:
 
 - `POST /api/tutor/conversations`
 - `GET /api/tutor/conversations?course_id=...`
@@ -132,6 +134,14 @@ amd/build/lib.min.js
 ```
 
 Despues de modificar `amd/src/lib.js`, recompila los assets AMD con el flujo habitual de Moodle/Grunt del proyecto antes de desplegar.
+
+Si trabajas desde este checkout directamente dentro de `blocks/kika_chat`, el archivo `rollup.config.js` ya usa rutas relativas al bloque:
+
+```text
+amd/src/lib.js -> amd/build/lib.min.js
+```
+
+Tras desplegar cambios de JavaScript, purga las caches de Moodle o ejecuta la actualizacion del plugin para que se sirva el nuevo modulo AMD.
 
 ## Estructura principal
 

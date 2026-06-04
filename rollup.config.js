@@ -2,14 +2,16 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 
 export default {
-    input: 'blocks/kika_chat/amd/src/lib.js', // Ruta del archivo fuente
+    input: 'amd/src/lib.js',
     output: {
-        file: 'blocks/kika_chat/amd/build/lib.min.js', // Archivo de salida
-        format: 'iife', // Formato: Immediately Invoked Function Expression
-        name: 'kikachatBlock', // Nombre global (opcional)
+        file: 'amd/build/lib.min.js',
+        format: 'amd',
+        amd: {
+            id: 'block_kika_chat/lib',
+        },
     },
     plugins: [
-        resolve(), // Soporte para módulos node_modules
-        commonjs(), // Soporte para módulos CommonJS
+        resolve(),
+        commonjs(),
     ],
 };

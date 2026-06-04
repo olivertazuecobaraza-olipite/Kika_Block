@@ -85,7 +85,6 @@ function kika_prepare_ajax_runtime($blockid) {
     } else {
         require_login();
     }
-    validate_context($runtime['context']);
     return $runtime;
 }
 
@@ -218,7 +217,12 @@ function kika_api_request($method, $path, array $runtime, $body = null, array $q
     if ($status >= 400) {
         $code = $status === 401 ? 'block_kika_license_auth_failed' : 'block_kika_api_error';
         kika_log_api_event($runtime, $action, $status, $code, $startedat);
-        throw new Exception(kika_get_public_api_error($status), $status);
+        $message = kika_get_public_api_error($status);
+        $detail = kika_get_remote_error_detail($decoded);
+        if ($detail !== '') {
+            $message .= ' Detalle: ' . $detail;
+        }
+        throw new Exception($message, $status);
     }
 
     kika_log_api_event($runtime, $action, $status, 'ok', $startedat);
@@ -236,6 +240,19 @@ function kika_get_public_api_error($status) {
         504 => 'kikaapitimeout',
     ];
     return get_string($strings[$status] ?? 'kikaapigenericerror', 'block_kika_chat');
+}
+
+function kika_get_remote_error_detail($decoded) {
+    if (!is_array($decoded)) {
+        return '';
+    }
+
+    $detail = kika_get_first_text_field($decoded, ['error', 'detail', 'message']);
+    if ($detail === '') {
+        return '';
+    }
+
+    return clean_param($detail, PARAM_TEXT);
 }
 
 function kika_sanitise_remote_html($html, context $context) {
@@ -262,6 +279,19 @@ function kika_sanitise_sources($sources) {
     return $clean;
 }
 
+function kika_get_first_text_field(array $data, array $fields) {
+    foreach ($fields as $field) {
+        if (isset($data[$field]) && is_scalar($data[$field]) && trim((string)$data[$field]) !== '') {
+            return (string)$data[$field];
+        }
+    }
+    return '';
+}
+
+function kika_get_remote_answer(array $response) {
+    return kika_get_first_text_field($response, ['respuesta', 'message', 'content', 'answer']);
+}
+
 function kika_sanitise_conversation($conversation) {
     if (!is_array($conversation)) {
         return [];
@@ -284,11 +314,38 @@ function kika_sanitise_conversation_list($response) {
     return ['conversations' => $conversations];
 }
 
+function kika_normalise_remote_message($message, context $context) {
+    if (!is_array($message)) {
+        return null;
+    }
+
+    $role = ($message['role'] ?? '') === 'user' ? 'user' : 'assistant';
+    $content = kika_get_first_text_field($message, ['content', 'message', 'respuesta', 'answer']);
+    $sources = kika_sanitise_sources($message['sources'] ?? $message['fuentes'] ?? []);
+
+    return [
+        'role' => $role,
+        'message' => $role === 'user'
+            ? s($content)
+            : kika_sanitise_remote_html($content, $context),
+        'created_at' => $message['created_at'] ?? null,
+        'web_search_used' => !empty($message['web_search_used']) || !empty($sources),
+        'sources' => $sources,
+    ];
+}
+
 function kika_send_json_error(Throwable $exception) {
     $code = (int)$exception->getCode();
     $status = $code >= 400 && $code <= 599 ? $code : 500;
+    $message = trim($exception->getMessage());
+    if ($message === '') {
+        $message = kika_get_public_api_error($status);
+    }
     http_response_code($status);
-    echo json_encode(['error' => kika_get_public_api_error($status)]);
+    echo json_encode([
+        'error' => $message,
+        'status' => $status,
+    ]);
 }
 
 function kika_get_conversation_instructions($curso) {

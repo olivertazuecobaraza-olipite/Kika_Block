@@ -481,6 +481,13 @@
     width: 100%;
 }
 
+.block_kika_chat .openai_message.error .openai-message-bubble,
+.openai-chat-wrapper .openai_message.error .openai-message-bubble {
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+
 .block_kika_chat .openai_message.user a,
 .openai-chat-wrapper .openai_message.user a {
     color: #93c5fd !important;

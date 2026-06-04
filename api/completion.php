@@ -62,7 +62,7 @@ try {
         ['prompt' => $message, 'web_search' => $websearch]
     );
 
-    $answer = $response['respuesta'] ?? '';
+    $answer = kika_get_remote_answer($response);
     $answer = kika_sanitise_remote_html($answer, $runtime['context']);
     $sources = kika_sanitise_sources($response['sources'] ?? $response['fuentes'] ?? []);
 

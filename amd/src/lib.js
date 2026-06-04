@@ -8,7 +8,8 @@ let state = {
     persistConvo: true,
     conversationId: null,
     conversations: [],
-    sending: false
+    sending: false,
+    creatingConversation: false
 };
 const statesByRoot = new WeakMap();
 
@@ -30,7 +31,8 @@ const getJson = (response) => response.text().then((text) => {
     }
 
     if (!response.ok) {
-        throw new Error(data.error || response.statusText);
+        const message = data.error || response.statusText || errorString;
+        throw new Error(`HTTP ${response.status}: ${message}`);
     }
     return data;
 });
@@ -87,7 +89,8 @@ export const init = (data) => {
         persistConvo: data.persistConvo === "1",
         conversationId: null,
         conversations: [],
-        sending: false
+        sending: false,
+        creatingConversation: false
     };
     statesByRoot.set(root, state);
 
@@ -253,7 +256,7 @@ const refreshConversationList = (loadActive = false, root = document) => {
                 clearActiveConversation();
             }
         })
-        .catch((error) => setConversationStatus(error.message || errorString, root));
+        .catch((error) => showFrontendError(error, root));
 };
 
 const renderConversationList = (root = document) => {
@@ -313,6 +316,13 @@ const setConversationStatus = (message, root = document) => {
     }
 };
 
+const showFrontendError = (error, root = document) => {
+    const message = error && error.message ? error.message : errorString;
+    setConversationStatus(message, root);
+    addToChatLog('bot error', escapeHtml(message), root);
+    return message;
+};
+
 const loadConversation = (conversationId, root = document) => {
     activateRoot(root);
     if (!conversationId) return Promise.resolve();
@@ -325,6 +335,9 @@ const loadConversation = (conversationId, root = document) => {
             persistActiveConversation();
             root.querySelector('#kika_chat_log').innerHTML = '';
             (data.messages || []).forEach((message) => {
+                if (!message.message) {
+                    return;
+                }
                 addToChatLog(message.role === 'user' ? 'user' : 'bot', message.message, root, message);
             });
             if ((data.messages || []).length > 0) {
@@ -335,11 +348,52 @@ const loadConversation = (conversationId, root = document) => {
             setConversationStatus('', root);
             renderConversationList(root);
         })
-        .catch((error) => setConversationStatus(error.message || errorString, root));
+        .catch((error) => showFrontendError(error, root));
 };
 
 const startNewConversation = (root = document) => {
     activateRoot(root);
+    if (state.creatingConversation) return;
+
+    state.creatingConversation = true;
+    setConversationStatus('Creando conversacion...', root);
+
+    fetch(apiUrl('conversations.php'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({blockId: state.blockId})
+    })
+        .then(getJson)
+        .then((conversation) => {
+            activateRoot(root);
+            if (!conversation.conversation_id) {
+                throw new Error('KIKA_API did not create a conversation.');
+            }
+            state.conversationId = conversation.conversation_id;
+            persistActiveConversation();
+            root.querySelector('#kika_chat_log').innerHTML = '';
+            showWelcome(root);
+            state.conversations = [
+                conversation,
+                ...state.conversations.filter((item) => item.conversation_id !== conversation.conversation_id)
+            ];
+            renderConversationList(root);
+            setConversationStatus('', root);
+            return refreshConversationList(false, root);
+        })
+        .then(() => {
+            const input = root.querySelector('#openai_input');
+            if (input) {
+                input.focus();
+            }
+        })
+        .catch((error) => showFrontendError(error, root))
+        .finally(() => {
+            state.creatingConversation = false;
+        });
+};
+
+const resetLocalConversation = (root = document) => {
     clearActiveConversation();
     root.querySelector('#kika_chat_log').innerHTML = '';
     showWelcome(root);
@@ -378,7 +432,7 @@ const renameConversation = (conversation, root = document) => {
     })
         .then(getJson)
         .then(() => refreshConversationList(false, root))
-        .catch((error) => setConversationStatus(error.message || errorString, root));
+        .catch((error) => showFrontendError(error, root));
 };
 
 const deleteConversation = (conversation, root = document) => {
@@ -397,54 +451,52 @@ const deleteConversation = (conversation, root = document) => {
         .then(getJson)
         .then(() => {
             if (conversation.conversation_id === state.conversationId) {
-                startNewConversation(root);
+                resetLocalConversation(root);
             }
             return refreshConversationList(false, root);
         })
-        .catch((error) => setConversationStatus(error.message || errorString, root));
+        .catch((error) => showFrontendError(error, root));
 };
 
 const addToChatLog = (type, message, root = document, metadata = {}) => {
     hideWelcome(true, root);
-    setTimeout(() => {
-        let messageContainer = root.querySelector('#kika_chat_log');
-        if (!messageContainer) return;
+    let messageContainer = root.querySelector('#kika_chat_log');
+    if (!messageContainer) return;
 
-        const messageElem = document.createElement('div');
-        messageElem.classList.add('openai_message');
-        for (let className of type.split(' ')) {
-            messageElem.classList.add(className);
-        }
+    const messageElem = document.createElement('div');
+    messageElem.classList.add('openai_message');
+    for (let className of type.split(' ')) {
+        messageElem.classList.add(className);
+    }
 
-        if (type.includes('loading')) {
-            const bubble = document.createElement('div');
-            bubble.classList.add('openai-message-bubble');
-            const loader = document.createElement('div');
-            loader.classList.add('openai-loading-dots');
-            loader.innerHTML = '<span></span><span></span><span></span>';
-            bubble.appendChild(loader);
-            messageElem.appendChild(bubble);
-        } else if (type.includes('bot')) {
-            const headerElem = document.createElement('div');
-            headerElem.classList.add('openai-message-bot-header');
-            headerElem.innerHTML = `
-                <div class="openai-message-bot-avatar-circle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sparkle-svg">
-                        <path d="M12 3c0 4.5 3.5 8 8 8-4.5 0-8 3.5-8 8 0-4.5-3.5-8-8-8 4.5 0 8-3.5 8-8z" fill="currentColor"/>
-                    </svg>
-                </div>
-                <span class="openai-message-bot-name">${escapeHtml(window.assistantName || 'Kika')}</span>
-            `;
-            messageElem.appendChild(headerElem);
-            appendBubble(messageElem, message);
-            appendWebSearchMetadata(messageElem, metadata);
-        } else {
-            appendBubble(messageElem, message);
-        }
+    if (type.includes('loading')) {
+        const bubble = document.createElement('div');
+        bubble.classList.add('openai-message-bubble');
+        const loader = document.createElement('div');
+        loader.classList.add('openai-loading-dots');
+        loader.innerHTML = '<span></span><span></span><span></span>';
+        bubble.appendChild(loader);
+        messageElem.appendChild(bubble);
+    } else if (type.includes('bot')) {
+        const headerElem = document.createElement('div');
+        headerElem.classList.add('openai-message-bot-header');
+        headerElem.innerHTML = `
+            <div class="openai-message-bot-avatar-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sparkle-svg">
+                    <path d="M12 3c0 4.5 3.5 8 8 8-4.5 0-8 3.5-8 8 0-4.5-3.5-8-8-8 4.5 0 8-3.5 8-8z" fill="currentColor"/>
+                </svg>
+            </div>
+            <span class="openai-message-bot-name">${escapeHtml(window.assistantName || 'Kika')}</span>
+        `;
+        messageElem.appendChild(headerElem);
+        appendBubble(messageElem, message);
+        appendWebSearchMetadata(messageElem, metadata);
+    } else {
+        appendBubble(messageElem, message);
+    }
 
-        messageContainer.appendChild(messageElem);
-        messageContainer.scrollTop = messageContainer.scrollHeight;
-    }, 100);
+    messageContainer.appendChild(messageElem);
+    messageContainer.scrollTop = messageContainer.scrollHeight;
 };
 
 const appendWebSearchMetadata = (messageElem, metadata) => {
@@ -519,7 +571,11 @@ const createCompletion = (message, webSearch = false, root = document) => {
             activateRoot(root);
             state.conversationId = data.conversation_id;
             persistActiveConversation();
-            addToChatLog('bot', data.message, root, data);
+            if (data.message) {
+                addToChatLog('bot', data.message, root, data);
+            } else {
+                showFrontendError(new Error('La respuesta recibida esta vacia.'), root);
+            }
             refreshConversationList(false, root);
             if (input) {
                 input.focus();
@@ -531,17 +587,23 @@ const createCompletion = (message, webSearch = false, root = document) => {
                 controlBar.classList.remove('disabled');
             }
             state.sending = false;
+            const errorMessage = showFrontendError(error, root);
             if (input) {
                 input.classList.add('error');
-                input.placeholder = error.message || errorString;
+                input.placeholder = errorMessage;
+                if (input.value.trim() === '') {
+                    input.value = message;
+                    input.style.height = 'auto';
+                    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+                }
             }
         });
 };
 
 const removeLoadingMessage = (root = document) => {
     let messageContainer = root.querySelector('#kika_chat_log');
-    if (messageContainer && messageContainer.lastElementChild && messageContainer.lastElementChild.classList.contains('loading')) {
-        messageContainer.removeChild(messageContainer.lastElementChild);
+    if (messageContainer) {
+        messageContainer.querySelectorAll('.openai_message.loading').forEach((message) => message.remove());
     }
 };
 

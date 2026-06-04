@@ -38,16 +38,10 @@ try {
 
     $messages = [];
     foreach (($response['messages'] ?? []) as $message) {
-        $role = ($message['role'] ?? '') === 'user' ? 'user' : 'assistant';
-        $messages[] = [
-            'role' => $role,
-            'message' => $role === 'user'
-                ? s($message['content'] ?? '')
-                : kika_sanitise_remote_html($message['content'] ?? '', $runtime['context']),
-            'created_at' => $message['created_at'] ?? null,
-            'web_search_used' => !empty($message['web_search_used']),
-            'sources' => kika_sanitise_sources($message['sources'] ?? $message['fuentes'] ?? []),
-        ];
+        $normalised = kika_normalise_remote_message($message, $runtime['context']);
+        if ($normalised !== null) {
+            $messages[] = $normalised;
+        }
     }
 
     echo json_encode([
