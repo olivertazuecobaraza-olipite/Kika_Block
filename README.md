@@ -11,7 +11,7 @@ La licencia JWT de `KIKA_API` se configura desde la administracion global de Moo
 - Gestion de conversaciones por curso, usuario e instancia de bloque.
 - Persistencia opcional de la conversacion activa en el navegador.
 - Selector/listado de conversaciones.
-- Acciones rapidas para crear examen, resumen, esquema o idea.
+- Acciones rapidas para crear examen, resumen o ejercicio mediante popups de configuracion.
 - Configuracion global del asistente desde administracion del sitio.
 - Configuracion por instancia de bloque para `vs_id_QDRANT` y codigo de curso.
 - Registro opcional de mensajes y respuestas en Moodle.

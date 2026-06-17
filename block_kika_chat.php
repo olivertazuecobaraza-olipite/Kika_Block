@@ -91,21 +91,17 @@ class block_kika_chat extends block_base {
         if ($PAGE->context->contextlevel != CONTEXT_USER) {
             $quickbuttonshtml = '
                 <div class="bot-buttons-container">
-                    <button id="crear-examen" class="quick-chip-btn" type="button">
+                    <button id="crear-examen" class="quick-chip-btn" type="button" data-kika-template="exam">
                         <span class="chip-icon">+</span>
-                        <span class="chip-text">Crear examen</span>
+                        <span class="chip-text">' . get_string('quick_create_exam', 'block_kika_chat') . '</span>
                     </button>
-                    <button id="crear-resumen" class="quick-chip-btn" type="button">
+                    <button id="crear-resumen" class="quick-chip-btn" type="button" data-kika-template="summary">
                         <span class="chip-icon">#</span>
-                        <span class="chip-text">Crear resumen</span>
+                        <span class="chip-text">' . get_string('quick_create_summary', 'block_kika_chat') . '</span>
                     </button>
-                    <button id="crear-esquema" class="quick-chip-btn" type="button">
+                    <button id="crear-ejercicio" class="quick-chip-btn" type="button" data-kika-template="exercise">
                         <span class="chip-icon">=</span>
-                        <span class="chip-text">Crear esquema</span>
-                    </button>
-                    <button id="crear-idea" class="quick-chip-btn" type="button">
-                        <span class="chip-icon">*</span>
-                        <span class="chip-text">Crear idea</span>
+                        <span class="chip-text">' . get_string('quick_create_exercise', 'block_kika_chat') . '</span>
                     </button>
                 </div>';
         }
@@ -170,6 +166,8 @@ class block_kika_chat extends block_base {
                 <div class="openai-chat-footer">
                     ' . $controlbarhtml . '
                 </div>
+
+                <div class="kika-template-modal" id="kika_template_modal" aria-hidden="true"></div>
             </div>';
 
         $this->content->footer = '';
