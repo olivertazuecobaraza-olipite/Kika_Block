@@ -9,8 +9,11 @@
  */
 
 $string['quick_create_exam'] = 'Crear examen';
-$string['quick_create_summary'] = 'Crear resumen';
+$string['quick_create_test'] = 'Crear Test';
+$string['quick_create_summary'] = 'Crear Resumen';
 $string['quick_create_exercise'] = 'Crear Ejercicio';
+$string['quick_menu_label'] = 'Abrir acciones';
+$string['quick_web_search'] = 'WebSearch (buscar por internet)';
 $string['template_close'] = 'Cerrar';
 $string['template_cancel'] = 'Cancelar';
 $string['template_required_error'] = 'Completa el tema para continuar.';
@@ -58,6 +61,7 @@ $string['template_summary_focus_study'] = 'Para estudiar';
 $string['template_summary_focus_exam'] = 'Para repasar antes de examen';
 $string['template_summary_submit'] = 'Generar resumen';
 $string['template_exercise_title'] = 'Generar ejercicio';
+$string['template_exercise_submit'] = 'Generar ejercicio';
 $string['template_exercise_intro'] = 'Define la practica que quieres crear para este curso.';
 $string['template_exercise_type_label'] = 'Tipo de ejercicio';
 $string['template_exercise_type_hint'] = 'Elige la actividad que necesitas.';

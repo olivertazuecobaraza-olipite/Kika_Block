@@ -25,21 +25,37 @@
 
 <div id="control_bar" class="openai-control-bar">
     <div class="openai-input-card">
-        <!-- Web search toggle on the far left -->
-        <label class="openai-add-btn kika-web-search-toggle" title="Buscar en internet">
+        <div class="kika-quick-menu-wrap">
+            <button id="kika_quick_menu_toggle" class="openai-add-btn kika-quick-menu-toggle" title="{{#str}}quick_menu_label, block_kika_chat{{/str}}" type="button" aria-label="{{#str}}quick_menu_label, block_kika_chat{{/str}}" aria-controls="kika_quick_menu" aria-expanded="false">+</button>
+            <div id="kika_quick_menu" class="kika-quick-menu" role="menu" hidden>
+                <button class="kika-quick-menu-item" type="button" role="menuitemcheckbox" data-kika-menu-action="web_search" aria-checked="false">
+                    <span class="kika-quick-menu-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="10.5" cy="10.5" r="6.5"></circle>
+                            <line x1="15.5" y1="15.5" x2="21" y2="21"></line>
+                            <path d="M4.4 8.5h12.2"></path>
+                            <path d="M4.4 12.5h12.2"></path>
+                            <path d="M10.5 4c1.7 1.8 2.5 4 2.5 6.5s-.8 4.7-2.5 6.5"></path>
+                            <path d="M10.5 4C8.8 5.8 8 8 8 10.5s.8 4.7 2.5 6.5"></path>
+                        </svg>
+                    </span>
+                    <span>{{#str}}quick_web_search, block_kika_chat{{/str}}</span>
+                </button>
+                <button class="kika-quick-menu-item" type="button" role="menuitem" data-kika-template="summary">
+                    <span class="kika-quick-menu-icon">#</span>
+                    <span>{{#str}}quick_create_summary, block_kika_chat{{/str}}</span>
+                </button>
+                <button class="kika-quick-menu-item" type="button" role="menuitem" data-kika-template="exam">
+                    <span class="kika-quick-menu-icon">?</span>
+                    <span>{{#str}}quick_create_test, block_kika_chat{{/str}}</span>
+                </button>
+                <button class="kika-quick-menu-item" type="button" role="menuitem" data-kika-template="exercise">
+                    <span class="kika-quick-menu-icon">=</span>
+                    <span>{{#str}}quick_create_exercise, block_kika_chat{{/str}}</span>
+                </button>
+            </div>
             <input id="kika_web_search" type="checkbox">
-            <span class="kika-web-search-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="input-btn-icon" aria-hidden="true">
-                    <circle cx="10.5" cy="10.5" r="6.5"></circle>
-                    <line x1="15.5" y1="15.5" x2="21" y2="21"></line>
-                    <path d="M4.4 8.5h12.2"></path>
-                    <path d="M4.4 12.5h12.2"></path>
-                    <path d="M10.5 4c1.7 1.8 2.5 4 2.5 6.5s-.8 4.7-2.5 6.5"></path>
-                    <path d="M10.5 4C8.8 5.8 8 8 8 10.5s.8 4.7 2.5 6.5"></path>
-                </svg>
-            </span>
-            <span class="sr-only">Buscar en internet</span>
-        </label>
+        </div>
 
         <!-- Message textarea -->
         <textarea rows="1" id="openai_input" placeholder="{{#str}}askaquestion, block_kika_chat{{/str}}" name="message"></textarea>

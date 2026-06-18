@@ -367,6 +367,52 @@ function kika_create_remote_conversation(array $runtime, $title = null) {
     return kika_api_request('POST', '/conversations', $runtime, $body);
 }
 
+function kika_clean_optional_instructions($value) {
+    $value = clean_param($value ?? '', PARAM_TEXT);
+    return core_text::substr($value, 0, 2000);
+}
+
+function kika_require_generator_choice(array $body, $field, array $allowed) {
+    $value = clean_param($body[$field] ?? '', PARAM_ALPHANUMEXT);
+    if (!in_array($value, $allowed, true)) {
+        throw new Exception(get_string('kikaapibadrequest', 'block_kika_chat'), 400);
+    }
+    return $value;
+}
+
+function kika_require_generator_text(array $body, $field, $maxlength = 255) {
+    $value = clean_param($body[$field] ?? '', PARAM_TEXT);
+    $value = core_text::substr(trim($value), 0, $maxlength);
+    if ($value === '') {
+        throw new Exception(get_string('kikaapibadrequest', 'block_kika_chat'), 400);
+    }
+    return $value;
+}
+
+function kika_require_generator_int(array $body, $field, $min, $max) {
+    $value = clean_param($body[$field] ?? null, PARAM_INT);
+    if ($value < $min || $value > $max) {
+        throw new Exception(get_string('kikaapibadrequest', 'block_kika_chat'), 400);
+    }
+    return $value;
+}
+
+function kika_normalise_generator_response(array $response, $conversationid, $type, context $context) {
+    $answer = kika_get_remote_answer($response);
+    $answer = kika_sanitise_remote_html($answer, $context);
+    $sources = kika_sanitise_sources($response['sources'] ?? $response['fuentes'] ?? []);
+
+    return [
+        'conversation_id' => clean_param($response['conversation_id'] ?? $conversationid, PARAM_ALPHANUMEXT),
+        'tipo_generacion' => clean_param($response['tipo_generacion'] ?? $type, PARAM_ALPHA),
+        'respuesta' => $answer,
+        'message' => $answer,
+        'web_search_used' => !empty($response['web_search_used']) || !empty($sources),
+        'fuentes' => $sources,
+        'sources' => $sources,
+    ];
+}
+
 /**
  * If setting is enabled, log the user's message and the AI response
  */
