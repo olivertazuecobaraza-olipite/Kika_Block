@@ -478,8 +478,9 @@
 
 .block_kika_chat .kika-conversation-panel-content {
     display: flex;
-    flex: 0 0 274px;
+    flex: 1 1 auto;
     flex-direction: column;
+    height: 100%;
     min-height: 0;
     position: relative;
     width: 274px;
