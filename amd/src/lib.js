@@ -72,6 +72,7 @@ const templateFallbackStrings = {
     template_no: 'No'
 };
 let activeTemplateModal = null;
+const initializedRoots = new WeakSet();
 
 let state = {
     blockId: null,
@@ -82,7 +83,17 @@ let state = {
     conversations: [],
     sending: false,
     creatingConversation: false,
-    createConversationPromise: null
+    createConversationPromise: null,
+    conversationLoadController: null,
+    conversationListRequestId: 0,
+    textareaFrame: null,
+    scrollFrame: null,
+    welcomeTimer: null,
+    welcomeFrame: null,
+    menuTimer: null,
+    panelTimer: null,
+    panelFrame: null,
+    expandAnimation: null
 };
 const statesByRoot = new WeakMap();
 
@@ -125,40 +136,97 @@ const activateRoot = (root) => {
     }
 };
 
+const prefersReducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const afterTransition = (element, propertyName, duration, callback) => {
+    let timer = null;
+    let finished = false;
+    const finish = (runCallback = true) => {
+        if (finished) return;
+        finished = true;
+        element.removeEventListener('transitionend', onTransitionEnd);
+        if (timer) window.clearTimeout(timer);
+        if (runCallback) callback();
+    };
+    const onTransitionEnd = (event) => {
+        if (event.target !== element || (propertyName && event.propertyName !== propertyName)) return;
+        finish();
+    };
+    element.addEventListener('transitionend', onTransitionEnd);
+    timer = window.setTimeout(() => finish(), duration + 60);
+    return () => finish(false);
+};
+
+const scheduleTextareaResize = (input, root = document) => {
+    activateRoot(root);
+    if (!input) return;
+    const rootState = state;
+    if (rootState.textareaFrame) {
+        window.cancelAnimationFrame(rootState.textareaFrame);
+    }
+    rootState.textareaFrame = window.requestAnimationFrame(() => {
+        input.style.height = 'auto';
+        input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+        rootState.textareaFrame = null;
+    });
+};
+
 const hideWelcome = (immediate = false, root = document) => {
+    activateRoot(root);
+    const rootState = state;
     const welcomeMsg = root.querySelector("#welcome-message");
     if (!welcomeMsg) return;
 
-    welcomeMsg.classList.add("hidden-welcome");
-    welcomeMsg.style.opacity = "0";
-    welcomeMsg.style.pointerEvents = "none";
+    if (rootState.welcomeTimer) {
+        rootState.welcomeTimer();
+        rootState.welcomeTimer = null;
+    }
+    if (rootState.welcomeFrame) {
+        window.cancelAnimationFrame(rootState.welcomeFrame);
+        rootState.welcomeFrame = null;
+    }
 
-    if (immediate) {
+    welcomeMsg.classList.add("hidden-welcome");
+
+    if (immediate || prefersReducedMotion()) {
         welcomeMsg.classList.add("d-none");
-        welcomeMsg.style.setProperty("display", "none", "important");
     } else {
-        welcomeMsg.style.transition = "opacity 0.3s ease, transform 0.3s ease";
-        welcomeMsg.style.transform = "translateY(-10px)";
-        setTimeout(() => {
-            welcomeMsg.classList.add("d-none");
-            welcomeMsg.style.setProperty("display", "none", "important");
-        }, 300);
+        rootState.welcomeTimer = afterTransition(welcomeMsg, 'transform', 220, () => {
+            if (welcomeMsg.classList.contains('hidden-welcome')) welcomeMsg.classList.add("d-none");
+            rootState.welcomeTimer = null;
+        });
     }
 };
 
 const showWelcome = (root = document) => {
+    activateRoot(root);
+    const rootState = state;
     const welcomeMsg = root.querySelector("#welcome-message");
     if (!welcomeMsg) return;
-    welcomeMsg.classList.remove("hidden-welcome", "d-none");
-    welcomeMsg.style.removeProperty("display");
-    welcomeMsg.style.removeProperty("opacity");
-    welcomeMsg.style.removeProperty("transform");
-    welcomeMsg.style.removeProperty("pointer-events");
-    welcomeMsg.style.removeProperty("transition");
+    if (rootState.welcomeTimer) {
+        rootState.welcomeTimer();
+        rootState.welcomeTimer = null;
+    }
+    if (rootState.welcomeFrame) window.cancelAnimationFrame(rootState.welcomeFrame);
+    welcomeMsg.classList.remove("d-none");
+    if (prefersReducedMotion()) {
+        welcomeMsg.classList.remove("hidden-welcome");
+        return;
+    }
+    welcomeMsg.classList.add("hidden-welcome");
+    rootState.welcomeFrame = window.requestAnimationFrame(() => {
+        rootState.welcomeFrame = null;
+        welcomeMsg.classList.remove("hidden-welcome");
+    });
 };
 
 export const init = (data) => {
     const root = getBlockRoot(data.blockId);
+    if (initializedRoots.has(root)) {
+        activateRoot(root);
+        refreshConversationList(true, root);
+        return;
+    }
     state = {
         blockId: data.blockId,
         courseId: data.courseId,
@@ -168,17 +236,24 @@ export const init = (data) => {
         conversations: [],
         sending: false,
         creatingConversation: false,
-        createConversationPromise: null
+        createConversationPromise: null,
+        conversationLoadController: null,
+        conversationListRequestId: 0,
+        textareaFrame: null,
+        scrollFrame: null,
+        welcomeTimer: null,
+        welcomeFrame: null,
+        menuTimer: null,
+        panelTimer: null,
+        panelFrame: null,
+        expandAnimation: null
     };
     statesByRoot.set(root, state);
+    initializedRoots.add(root);
 
     if (state.persistConvo) {
         state.conversationId = localStorage.getItem(storageKey());
     }
-
-    window.addEventListener('resize', event => {
-        event.stopImmediatePropagation();
-    }, true);
 
     bindInputHandlers(root);
     bindHeaderHandlers(root);
@@ -192,10 +267,7 @@ const bindInputHandlers = (root) => {
     const sendButton = root.querySelector('#go');
 
     if (inputField) {
-        inputField.addEventListener('input', () => {
-            inputField.style.height = 'auto';
-            inputField.style.height = Math.min(inputField.scrollHeight, 120) + 'px';
-        });
+        inputField.addEventListener('input', () => scheduleTextareaResize(inputField, root));
 
         inputField.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -221,6 +293,23 @@ const bindHeaderHandlers = (root) => {
         newConversationBtn.addEventListener('click', () => startNewConversation(root));
     }
 
+    const conversationList = root.querySelector('#kika_conversation_list');
+    if (conversationList) {
+        conversationList.addEventListener('click', (event) => {
+            activateRoot(root);
+            const actionButton = event.target.closest('[data-conversation-action]');
+            if (!actionButton) return;
+            const conversation = state.conversations.find(
+                (item) => item.conversation_id === actionButton.dataset.conversationId
+            );
+            if (!conversation) return;
+            const action = actionButton.dataset.conversationAction;
+            if (action === 'open') loadConversation(conversation.conversation_id, root);
+            if (action === 'rename') renameConversation(conversation, root);
+            if (action === 'delete') deleteConversation(conversation, root);
+        });
+    }
+
     const toggleBtn = root.querySelector('#conversation-toggle');
     if (toggleBtn) {
         setConversationPanelOpen(toggleBtn.getAttribute('aria-expanded') === 'true', root);
@@ -232,35 +321,114 @@ const bindHeaderHandlers = (root) => {
         });
     }
 
+    const panelScrim = root.querySelector('.kika-conversation-scrim');
+    if (panelScrim) {
+        panelScrim.addEventListener('click', () => setConversationPanelOpen(false, root));
+    }
+
+    root.addEventListener('keydown', (event) => {
+        const wrapper = root.querySelector('.openai-chat-wrapper');
+        if (event.key !== 'Escape' || !wrapper || !wrapper.classList.contains('conversation-panel-open')) return;
+        if (activeTemplateModal && activeTemplateModal.root === root) return;
+        event.preventDefault();
+        setConversationPanelOpen(false, root);
+    });
+
     const popoutBtn = root.querySelector('#popout');
     if (popoutBtn) {
         popoutBtn.addEventListener('click', () => {
+            activateRoot(root);
             if (document.querySelector('.drawer.drawer-right')) {
                 document.querySelector('.drawer.drawer-right').style.zIndex = '1041';
             }
             const block = root.closest('.block_kika_chat') || root;
             if (block) {
                 block.classList.toggle('expanded');
+                popoutBtn.setAttribute('aria-pressed', block.classList.contains('expanded') ? 'true' : 'false');
+                const wrapper = root.querySelector('.openai-chat-wrapper');
+                if (wrapper && !prefersReducedMotion() && wrapper.animate) {
+                    if (state.expandAnimation) state.expandAnimation.cancel();
+                    const baseTransform = window.getComputedStyle(wrapper).transform;
+                    const transform = baseTransform === 'none' ? '' : baseTransform;
+                    wrapper.classList.add('is-expanding');
+                    const animation = wrapper.animate([
+                        {opacity: 0.94, transform: `${transform} scale(0.992)`.trim()},
+                        {opacity: 1, transform: `${transform} scale(1)`.trim()}
+                    ], {
+                        duration: 200,
+                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
+                    });
+                    state.expandAnimation = animation;
+                    animation.finished.catch(() => {}).finally(() => {
+                        wrapper.classList.remove('is-expanding');
+                        if (state.expandAnimation === animation) state.expandAnimation = null;
+                    });
+                }
             }
         });
     }
 };
 
 const setConversationPanelOpen = (open, root = document) => {
+    activateRoot(root);
+    const rootState = state;
     const wrapper = root.querySelector('.openai-chat-wrapper');
     const panel = root.querySelector('#kika_conversation_panel');
     const toggleBtn = root.querySelector('#conversation-toggle');
+    const scrim = root.querySelector('.kika-conversation-scrim');
 
-    if (wrapper) {
-        wrapper.classList.toggle('conversation-panel-open', open);
+    if (rootState.panelTimer) {
+        rootState.panelTimer();
+        rootState.panelTimer = null;
     }
+    if (rootState.panelFrame) {
+        window.cancelAnimationFrame(rootState.panelFrame);
+        rootState.panelFrame = null;
+    }
+
     if (panel) {
-        panel.hidden = !open;
+        if (open) {
+            panel.hidden = false;
+            panel.setAttribute('aria-hidden', 'false');
+        } else {
+            panel.setAttribute('aria-hidden', 'true');
+        }
+        panel.classList.add('is-motion-active');
+    }
+    if (scrim) {
+        scrim.setAttribute('aria-hidden', open ? 'false' : 'true');
+        scrim.classList.add('is-motion-active');
+    }
+    if (wrapper) {
+        if (open && panel && !prefersReducedMotion()) {
+            rootState.panelFrame = window.requestAnimationFrame(() => {
+                rootState.panelFrame = null;
+                if (panel.getAttribute('aria-hidden') === 'false') {
+                    wrapper.classList.add('conversation-panel-open');
+                }
+            });
+        } else {
+            wrapper.classList.toggle('conversation-panel-open', open);
+        }
+    }
+    const finishMotion = () => {
+        if (panel) {
+            panel.classList.remove('is-motion-active');
+            if (!open && panel.getAttribute('aria-hidden') === 'true') panel.hidden = true;
+        }
+        if (scrim) scrim.classList.remove('is-motion-active');
+        rootState.panelTimer = null;
+    };
+    if (!panel || prefersReducedMotion()) {
+        finishMotion();
+    } else {
+        rootState.panelTimer = afterTransition(panel, 'transform', 220, finishMotion);
     }
     if (toggleBtn) {
         toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
         toggleBtn.classList.toggle('active', open);
     }
+    if (!open && panel && panel.contains(document.activeElement) && toggleBtn) toggleBtn.focus();
 };
 
 const loadStrings = () => {
@@ -298,7 +466,6 @@ const sendCurrentInput = (root = document) => {
         webSearch.checked = false;
         updateWebSearchState(root);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 const initButtonHandlers = (root) => {
@@ -312,8 +479,10 @@ const initButtonHandlers = (root) => {
             setQuickMenuOpen(!menuToggle.classList.contains('is-open'), root);
         });
 
-        menu.querySelectorAll('[data-kika-menu-action="web_search"]').forEach((button) => {
-            button.addEventListener('click', (event) => {
+        root.addEventListener('click', (event) => {
+            const webSearchButton = event.target.closest('[data-kika-menu-action="web_search"]');
+            const templateButton = event.target.closest('[data-kika-template]');
+            if (webSearchButton && root.contains(webSearchButton)) {
                 event.stopPropagation();
                 if (webSearch) {
                     webSearch.checked = !webSearch.checked;
@@ -321,40 +490,80 @@ const initButtonHandlers = (root) => {
                 }
                 setQuickMenuOpen(false, root);
                 const input = root.querySelector('#openai_input');
-                if (input) {
-                    input.focus();
-                }
-            });
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!root.contains(event.target)) {
+                if (input) input.focus();
+                return;
+            }
+            if (templateButton && root.contains(templateButton)) {
+                setQuickMenuOpen(false, root);
+                openTemplateModal(templateButton.dataset.kikaTemplate, root, templateButton);
                 return;
             }
             if (!menu.contains(event.target) && event.target !== menuToggle) {
                 setQuickMenuOpen(false, root);
             }
         });
-    }
 
-    root.querySelectorAll('[data-kika-template]').forEach((button) => {
-        button.addEventListener('click', () => {
-            setQuickMenuOpen(false, root);
-            openTemplateModal(button.dataset.kikaTemplate, root, button);
+        menu.addEventListener('keydown', (event) => handleQuickMenuKeydown(event, root));
+        menuToggle.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+            event.preventDefault();
+            setQuickMenuOpen(true, root);
+            const items = menu.querySelectorAll('[role^="menuitem"]');
+            const target = event.key === 'ArrowDown' ? items[0] : items[items.length - 1];
+            if (target) target.focus();
         });
-    });
+    }
 
     updateWebSearchState(root);
 };
 
 const setQuickMenuOpen = (open, root = document) => {
+    activateRoot(root);
+    const rootState = state;
     const menuToggle = root.querySelector('#kika_quick_menu_toggle');
     const menu = root.querySelector('#kika_quick_menu');
     if (!menuToggle || !menu) return;
 
-    menu.hidden = !open;
+    if (rootState.menuTimer) {
+        rootState.menuTimer();
+        rootState.menuTimer = null;
+    }
+    menu.classList.add('is-motion-active');
+    if (open) {
+        menu.hidden = false;
+        window.requestAnimationFrame(() => {
+            if (menu.getAttribute('aria-hidden') === 'false') menu.classList.add('is-open');
+        });
+    } else {
+        menu.classList.remove('is-open');
+    }
     menuToggle.classList.toggle('is-open', open);
     menuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+    const finishMotion = () => {
+        menu.classList.remove('is-motion-active');
+        if (!open && menu.getAttribute('aria-hidden') === 'true') menu.hidden = true;
+        rootState.menuTimer = null;
+    };
+    if (prefersReducedMotion()) finishMotion();
+    else rootState.menuTimer = afterTransition(menu, 'transform', 180, finishMotion);
+};
+
+const handleQuickMenuKeydown = (event, root) => {
+    const items = Array.from(root.querySelectorAll('#kika_quick_menu [role^="menuitem"]'));
+    const current = items.indexOf(document.activeElement);
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        setQuickMenuOpen(false, root);
+        root.querySelector('#kika_quick_menu_toggle').focus();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        items[(current + direction + items.length) % items.length].focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        items[event.key === 'Home' ? 0 : items.length - 1].focus();
+    }
 };
 
 const updateWebSearchState = (root = document) => {
@@ -657,10 +866,30 @@ const openTemplateModal = (templateId, root, trigger) => {
     if (!config || !modal) return;
 
     activateRoot(root);
+    if (modal._kikaCloseCancel) {
+        modal._kikaCloseCancel();
+        modal._kikaCloseCancel = null;
+    }
+    if (activeTemplateModal) {
+        closeTemplateModal(true);
+    }
     renderTemplateModal(modal, config, root, trigger);
     modal.classList.add('is-open');
+    modal.classList.add('is-motion-active');
+    window.requestAnimationFrame(() => {
+        modal.classList.add('is-visible');
+        const dialog = modal.querySelector('.kika-template-dialog');
+        if (dialog && !prefersReducedMotion()) {
+            modal._kikaOpenCancel = afterTransition(dialog, 'transform', 240, () => {
+                modal.classList.remove('is-motion-active');
+                modal._kikaOpenCancel = null;
+            });
+        } else {
+            modal.classList.remove('is-motion-active');
+        }
+    });
     modal.setAttribute('aria-hidden', 'false');
-    activeTemplateModal = {modal, root, trigger};
+    activeTemplateModal = {modal, root, trigger, closeTimer: null};
 
     const firstInput = modal.querySelector('input[type="text"], textarea, input, button');
     if (firstInput) {
@@ -668,15 +897,31 @@ const openTemplateModal = (templateId, root, trigger) => {
     }
 };
 
-const closeTemplateModal = () => {
+const closeTemplateModal = (immediate = false, restoreFocus = true) => {
     if (!activeTemplateModal) return;
-    const {modal, trigger} = activeTemplateModal;
-    modal.classList.remove('is-open');
+    const currentModal = activeTemplateModal;
+    const {modal, trigger} = currentModal;
+    if (modal._kikaOpenCancel) {
+        modal._kikaOpenCancel();
+        modal._kikaOpenCancel = null;
+    }
+    modal.classList.add('is-motion-active');
+    modal.classList.remove('is-visible');
     modal.setAttribute('aria-hidden', 'true');
-    modal.innerHTML = '';
+    const dialog = modal.querySelector('.kika-template-dialog');
+    if (dialog) dialog.inert = true;
     activeTemplateModal = null;
-    if (trigger) {
-        trigger.focus();
+    if (restoreFocus && trigger && document.contains(trigger)) trigger.focus();
+    const finishClose = () => {
+        modal._kikaCloseCancel = null;
+        modal.classList.remove('is-motion-active');
+        modal.classList.remove('is-open');
+        modal.innerHTML = '';
+    };
+    if (immediate || prefersReducedMotion()) {
+        finishClose();
+    } else {
+        modal._kikaCloseCancel = afterTransition(dialog || modal, dialog ? 'transform' : null, 240, finishClose);
     }
 };
 
@@ -685,7 +930,7 @@ const renderTemplateModal = (modal, config, root, trigger) => {
 
     const overlay = document.createElement('div');
     overlay.className = 'kika-template-overlay';
-    overlay.addEventListener('click', closeTemplateModal);
+    overlay.addEventListener('click', () => closeTemplateModal());
 
     const dialog = document.createElement('div');
     dialog.className = 'kika-template-dialog';
@@ -714,7 +959,7 @@ const renderTemplateModal = (modal, config, root, trigger) => {
     closeButton.title = getString('template_close');
     closeButton.setAttribute('aria-label', getString('template_close'));
     closeButton.textContent = 'x';
-    closeButton.addEventListener('click', closeTemplateModal);
+    closeButton.addEventListener('click', () => closeTemplateModal());
     header.append(headerText, closeButton);
 
     const error = document.createElement('div');
@@ -734,7 +979,7 @@ const renderTemplateModal = (modal, config, root, trigger) => {
     cancel.type = 'button';
     cancel.className = 'kika-template-secondary';
     cancel.textContent = getString('template_cancel');
-    cancel.addEventListener('click', closeTemplateModal);
+    cancel.addEventListener('click', () => closeTemplateModal());
 
     const submit = document.createElement('button');
     submit.type = 'submit';
@@ -762,7 +1007,7 @@ const renderTemplateModal = (modal, config, root, trigger) => {
             }
             return;
         }
-        closeTemplateModal();
+        closeTemplateModal(false, false);
         sendTemplateGenerator(config, values, root);
         if (trigger) {
             trigger.blur();
@@ -930,18 +1175,39 @@ const sendTemplateGenerator = (config, values, root) => {
 };
 
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && activeTemplateModal) {
+    if (!activeTemplateModal) return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
         closeTemplateModal();
+        return;
+    }
+    if (event.key === 'Tab') {
+        const focusable = Array.from(activeTemplateModal.modal.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter((element) => element.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 });
 
 const refreshConversationList = (loadActive = false, root = document) => {
     activateRoot(root);
+    const rootState = state;
+    const requestId = ++rootState.conversationListRequestId;
     setConversationStatus('Cargando conversaciones...', root);
     return fetch(apiUrl('conversations.php', {blockId: state.blockId}))
         .then(getJson)
         .then((data) => {
             activateRoot(root);
+            if (requestId !== rootState.conversationListRequestId) return;
             state.conversations = data.conversations || [];
             renderConversationList(root);
             setConversationStatus(state.conversations.length ? '' : 'No hay conversaciones todavia.', root);
@@ -954,7 +1220,10 @@ const refreshConversationList = (loadActive = false, root = document) => {
                 clearActiveConversation();
             }
         })
-        .catch((error) => showFrontendError(error, root));
+        .catch((error) => {
+            if (requestId !== rootState.conversationListRequestId) return;
+            showFrontendError(error, root);
+        });
 };
 
 const renderConversationList = (root = document) => {
@@ -962,6 +1231,7 @@ const renderConversationList = (root = document) => {
     const list = root.querySelector('#kika_conversation_list');
     if (!list) return;
     list.innerHTML = '';
+    const fragment = document.createDocumentFragment();
 
     state.conversations.forEach((conversation) => {
         const item = document.createElement('div');
@@ -971,7 +1241,8 @@ const renderConversationList = (root = document) => {
         const content = document.createElement('button');
         content.className = 'kika-conversation-content';
         content.type = 'button';
-        content.addEventListener('click', () => loadConversation(conversation.conversation_id, root));
+        content.dataset.conversationAction = 'open';
+        content.dataset.conversationId = conversation.conversation_id;
 
         const title = document.createElement('span');
         title.className = 'kika-conversation-title';
@@ -990,21 +1261,24 @@ const renderConversationList = (root = document) => {
         rename.className = 'kika-conversation-icon-btn';
         rename.title = 'Renombrar';
         rename.setAttribute('aria-label', 'Renombrar conversacion');
+        rename.dataset.conversationAction = 'rename';
+        rename.dataset.conversationId = conversation.conversation_id;
         rename.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-        rename.addEventListener('click', () => renameConversation(conversation, root));
 
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'kika-conversation-icon-btn kika-conversation-icon-btn-danger';
         remove.title = 'Borrar';
         remove.setAttribute('aria-label', 'Borrar conversacion');
+        remove.dataset.conversationAction = 'delete';
+        remove.dataset.conversationId = conversation.conversation_id;
         remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
-        remove.addEventListener('click', () => deleteConversation(conversation, root));
 
         actions.append(rename, remove);
         item.append(content, actions);
-        list.appendChild(item);
+        fragment.appendChild(item);
     });
+    list.appendChild(fragment);
 };
 
 const setConversationStatus = (message, root = document) => {
@@ -1043,20 +1317,22 @@ const getFrontendErrorMessage = (error) => {
 const loadConversation = (conversationId, root = document) => {
     activateRoot(root);
     if (!conversationId) return Promise.resolve();
+    if (state.conversationLoadController) {
+        state.conversationLoadController.abort();
+    }
+    const controller = new AbortController();
+    state.conversationLoadController = controller;
     setConversationStatus('Cargando mensajes...', root);
-    return fetch(apiUrl('conversation_messages.php', {blockId: state.blockId, conversation_id: conversationId}))
+    return fetch(apiUrl('conversation_messages.php', {blockId: state.blockId, conversation_id: conversationId}), {
+        signal: controller.signal
+    })
         .then(getJson)
         .then((data) => {
             activateRoot(root);
+            if (state.conversationLoadController !== controller) return;
             state.conversationId = data.conversation_id;
             persistActiveConversation();
-            root.querySelector('#kika_chat_log').innerHTML = '';
-            (data.messages || []).forEach((message) => {
-                if (!message.message) {
-                    return;
-                }
-                addToChatLog(message.role === 'user' ? 'user' : 'bot', message.message, root, message);
-            });
+            renderChatHistory(data.messages || [], root);
             if ((data.messages || []).length > 0) {
                 hideWelcome(true, root);
             } else {
@@ -1065,7 +1341,16 @@ const loadConversation = (conversationId, root = document) => {
             setConversationStatus('', root);
             renderConversationList(root);
         })
-        .catch((error) => showFrontendError(error, root));
+        .catch((error) => {
+            if (error.name === 'AbortError') return;
+            showFrontendError(error, root);
+        })
+        .finally(() => {
+            activateRoot(root);
+            if (state.conversationLoadController === controller) {
+                state.conversationLoadController = null;
+            }
+        });
 };
 
 const startNewConversation = (root = document) => {
@@ -1113,16 +1398,10 @@ const createRemoteConversation = (root = document, options = {}) => {
             ];
             renderConversationList(root);
             setConversationStatus('', root);
-            return refreshConversationList(false, root)
-                .catch((error) => {
-                    if (window.console && window.console.error) {
-                        window.console.error('KIKA conversation list refresh failed:', error);
-                    }
-                    return conversation;
-                })
-                .then(() => conversation);
+            return conversation;
         })
         .then((conversation) => {
+            activateRoot(root);
             const input = root.querySelector('#openai_input');
             if (focusInput && input) {
                 input.focus();
@@ -1130,6 +1409,7 @@ const createRemoteConversation = (root = document, options = {}) => {
             return conversation;
         })
         .finally(() => {
+            activateRoot(root);
             state.creatingConversation = false;
             state.createConversationPromise = null;
         });
@@ -1138,7 +1418,13 @@ const createRemoteConversation = (root = document, options = {}) => {
 };
 
 const resetLocalConversation = (root = document) => {
+    activateRoot(root);
+    if (state.conversationLoadController) {
+        state.conversationLoadController.abort();
+        state.conversationLoadController = null;
+    }
     clearActiveConversation();
+    setConversationStatus('', root);
     root.querySelector('#kika_chat_log').innerHTML = '';
     showWelcome(root);
     renderConversationList(root);
@@ -1204,20 +1490,61 @@ const deleteConversation = (conversation, root = document) => {
 
 const addToChatLog = (type, message, root = document, metadata = {}) => {
     hideWelcome(true, root);
-    let messageContainer = root.querySelector('#kika_chat_log');
+    const messageContainer = root.querySelector('#kika_chat_log');
     if (!messageContainer) return;
 
+    const shouldFollow = isNearChatEnd(messageContainer);
+    messageContainer.appendChild(buildMessageElement(type, message, metadata));
+    if (shouldFollow) scheduleChatScroll(messageContainer, root, !prefersReducedMotion());
+};
+
+const renderChatHistory = (messages, root = document) => {
+    activateRoot(root);
+    const messageContainer = root.querySelector('#kika_chat_log');
+    if (!messageContainer) return;
+    const fragment = document.createDocumentFragment();
+    messages.forEach((message) => {
+        if (!message.message) return;
+        const type = message.role === 'user' ? 'user' : 'bot';
+        fragment.appendChild(buildMessageElement(type, message.message, message, false));
+    });
+    messageContainer.classList.add('restoring-history');
+    messageContainer.replaceChildren(fragment);
+    scheduleChatScroll(messageContainer, root, false, () => messageContainer.classList.remove('restoring-history'));
+};
+
+const isNearChatEnd = (container) => container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+
+const scheduleChatScroll = (container, root, smooth = false, callback = null) => {
+    activateRoot(root);
+    const rootState = state;
+    if (rootState.scrollFrame) window.cancelAnimationFrame(rootState.scrollFrame);
+    rootState.scrollFrame = window.requestAnimationFrame(() => {
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: smooth ? 'smooth' : 'auto'
+        });
+        rootState.scrollFrame = null;
+        if (callback) callback();
+    });
+};
+
+const buildMessageElement = (type, message, metadata = {}, animate = true) => {
     const messageElem = document.createElement('div');
     messageElem.classList.add('openai_message');
-    for (let className of type.split(' ')) {
+    if (!animate) messageElem.classList.add('no-enter-motion');
+    for (const className of type.split(' ')) {
         messageElem.classList.add(className);
     }
 
     if (type.includes('loading')) {
         const bubble = document.createElement('div');
         bubble.classList.add('openai-message-bubble');
+        bubble.setAttribute('role', 'status');
+        bubble.setAttribute('aria-label', 'Generando respuesta');
         const loader = document.createElement('div');
         loader.classList.add('openai-loading-dots');
+        loader.setAttribute('aria-hidden', 'true');
         loader.innerHTML = '<span></span><span></span><span></span>';
         bubble.appendChild(loader);
         messageElem.appendChild(bubble);
@@ -1238,9 +1565,7 @@ const addToChatLog = (type, message, root = document, metadata = {}) => {
     } else {
         appendBubble(messageElem, message);
     }
-
-    messageContainer.appendChild(messageElem);
-    messageContainer.scrollTop = messageContainer.scrollHeight;
+    return messageElem;
 };
 
 const appendWebSearchMetadata = (messageElem, metadata) => {
@@ -1275,15 +1600,25 @@ const appendBubble = (messageElem, message) => {
     messageElem.appendChild(bubble);
 };
 
+const setSendingState = (sending, root = document) => {
+    activateRoot(root);
+    state.sending = sending;
+    const controlBar = root.querySelector('#control_bar');
+    const wrapper = root.querySelector('.openai-chat-wrapper');
+    const sendButton = root.querySelector('#go');
+    if (controlBar) {
+        controlBar.classList.toggle('disabled', sending);
+        controlBar.setAttribute('aria-busy', sending ? 'true' : 'false');
+    }
+    if (wrapper) wrapper.setAttribute('aria-busy', sending ? 'true' : 'false');
+    if (sendButton) sendButton.disabled = sending;
+};
+
 const createCompletion = (message, webSearch = false, root = document) => {
     activateRoot(root);
     if (state.sending) return;
-    state.sending = true;
-    const controlBar = root.querySelector('#control_bar');
+    setSendingState(true, root);
     const input = root.querySelector('#openai_input');
-    if (controlBar) {
-        controlBar.classList.add('disabled');
-    }
     if (input) {
         input.classList.remove('error');
     }
@@ -1304,11 +1639,8 @@ const createCompletion = (message, webSearch = false, root = document) => {
         })
     })
         .then((response) => {
+            activateRoot(root);
             removeLoadingMessage(root);
-            if (controlBar) {
-                controlBar.classList.remove('disabled');
-            }
-            state.sending = false;
             return getJson(response);
         })
         .then((data) => {
@@ -1321,24 +1653,22 @@ const createCompletion = (message, webSearch = false, root = document) => {
                 showFrontendError(new Error('La respuesta recibida esta vacia.'), root);
             }
             refreshConversationList(false, root);
+            setSendingState(false, root);
             if (input) {
                 input.focus();
             }
         })
         .catch((error) => {
+            activateRoot(root);
             removeLoadingMessage(root);
-            if (controlBar) {
-                controlBar.classList.remove('disabled');
-            }
-            state.sending = false;
+            setSendingState(false, root);
             const errorMessage = showFrontendError(error, root);
             if (input) {
                 input.classList.add('error');
                 input.placeholder = errorMessage;
                 if (input.value.trim() === '') {
                     input.value = message;
-                    input.style.height = 'auto';
-                    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+                    scheduleTextareaResize(input, root);
                 }
             }
         });
@@ -1348,12 +1678,8 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
     activateRoot(root);
     if (state.sending) return;
 
-    state.sending = true;
-    const controlBar = root.querySelector('#control_bar');
+    setSendingState(true, root);
     const input = root.querySelector('#openai_input');
-    if (controlBar) {
-        controlBar.classList.add('disabled');
-    }
     if (input) {
         input.classList.remove('error');
         input.placeholder = questionString;
@@ -1362,6 +1688,7 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
 
     createRemoteConversation(root)
         .then((conversation) => {
+            activateRoot(root);
             const conversationId = conversation.conversation_id || state.conversationId;
             if (!conversationId) {
                 throw new Error('No se pudo crear una conversacion para generar contenido.');
@@ -1399,23 +1726,21 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
             }
         })
         .catch((error) => {
+            activateRoot(root);
             const errorMessage = showFrontendError(error, root);
             if (input) {
                 input.classList.add('error');
                 input.placeholder = errorMessage;
                 if (input.value.trim() === '') {
                     input.value = userMessage;
-                    input.style.height = 'auto';
-                    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+                    scheduleTextareaResize(input, root);
                 }
             }
         })
         .finally(() => {
+            activateRoot(root);
             removeLoadingMessage(root);
-            if (controlBar) {
-                controlBar.classList.remove('disabled');
-            }
-            state.sending = false;
+            setSendingState(false, root);
         });
 };
 

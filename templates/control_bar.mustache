@@ -27,7 +27,7 @@
     <div class="openai-input-card">
         <div class="kika-quick-menu-wrap">
             <button id="kika_quick_menu_toggle" class="openai-add-btn kika-quick-menu-toggle" title="{{#str}}quick_menu_label, block_kika_chat{{/str}}" type="button" aria-label="{{#str}}quick_menu_label, block_kika_chat{{/str}}" aria-controls="kika_quick_menu" aria-expanded="false">+</button>
-            <div id="kika_quick_menu" class="kika-quick-menu" role="menu" hidden>
+            <div id="kika_quick_menu" class="kika-quick-menu" role="menu" aria-hidden="true" hidden>
                 <button class="kika-quick-menu-item" type="button" role="menuitemcheckbox" data-kika-menu-action="web_search" aria-checked="false">
                     <span class="kika-quick-menu-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -61,7 +61,7 @@
         <textarea rows="1" id="openai_input" placeholder="{{#str}}askaquestion, block_kika_chat{{/str}}" name="message"></textarea>
 
         <!-- Submit button on the far right -->
-        <button class="openai-submit-btn" id="go" title="{{#str}}submit, block_kika_chat{{/str}}" type="button">
+        <button class="openai-submit-btn" id="go" title="{{#str}}submit, block_kika_chat{{/str}}" aria-label="{{#str}}submit, block_kika_chat{{/str}}" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="send-icon">
                 <line x1="22" y1="2" x2="11" y2="13"></line>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

@@ -139,7 +139,7 @@ class block_kika_chat extends block_base {
                                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
                             </svg>
                         </button>
-                        <button id="popout" class="header-action-btn" title="Expandir" type="button">
+                        <button id="popout" class="header-action-btn" title="Expandir" type="button" aria-pressed="false">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
                                 <path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
                             </svg>
@@ -148,14 +148,17 @@ class block_kika_chat extends block_base {
                 </div>
 
                 <div class="kika-chat-main">
-                    <aside id="kika_conversation_panel" class="kika-conversation-panel" aria-label="Conversaciones" hidden>
-                        <div id="kika_conversation_status" class="kika-conversation-status"></div>
-                        <div id="kika_conversation_list" class="kika-conversation-list"></div>
-                        <button id="kika_new_conversation" class="kika-panel-btn" title="Nueva conversacion" type="button" aria-label="Nueva conversacion">+</button>
+                    <aside id="kika_conversation_panel" class="kika-conversation-panel" aria-label="Conversaciones" aria-hidden="true" hidden>
+                        <div class="kika-conversation-panel-content">
+                            <div id="kika_conversation_status" class="kika-conversation-status" role="status" aria-live="polite"></div>
+                            <div id="kika_conversation_list" class="kika-conversation-list"></div>
+                            <button id="kika_new_conversation" class="kika-panel-btn" title="Nueva conversacion" type="button" aria-label="Nueva conversacion">+</button>
+                        </div>
                     </aside>
+                    <button class="kika-conversation-scrim" type="button" aria-label="Cerrar conversaciones" aria-hidden="true" tabindex="-1"></button>
 
                     <div class="openai-chat-body">
-                        <div id="kika_chat_log" role="log"></div>
+                        <div id="kika_chat_log" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Mensajes del chat"></div>
                         <div id="welcome-message" class="openai-welcome-container">
                             <h2 id="help-text">En que puedo ayudarte?</h2>
                             ' . $quickbuttonshtml . '

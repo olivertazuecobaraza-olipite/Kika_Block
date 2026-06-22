@@ -143,6 +143,10 @@ amd/src/lib.js -> amd/build/lib.min.js
 
 Tras desplegar cambios de JavaScript, purga las caches de Moodle o ejecuta la actualizacion del plugin para que se sirva el nuevo modulo AMD.
 
+### Movimiento de la interfaz
+
+Las duraciones y la curva de movimiento se centralizan como variables `--chat-motion-*` en `styles.css`. Las transiciones estructurales se coordinan desde `amd/src/lib.js` mediante clases de estado y `transitionend`; cualquier nueva animacion debe priorizar `opacity` y `transform`, retirar `will-change` al finalizar y respetar `prefers-reduced-motion`.
+
 ## Estructura principal
 
 ```text
