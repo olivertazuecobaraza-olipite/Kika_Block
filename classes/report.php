@@ -22,7 +22,7 @@ class report extends \table_sql {
         $this->no_sorting('airesponse');
 
         // Define the titles of columns to show in header.
-        $headers = array('User ID', 'User Name', 'User Message', 'AI Response', 'Context', 'Time');
+        $headers = array('ID de usuario', 'Nombre de usuario', 'Mensaje del usuario', 'Respuesta de la IA', 'Contexto', 'Fecha');
         $this->define_headers($headers);
     }
 

@@ -321,13 +321,23 @@
     align-items: center;
     display: flex;
     flex-direction: column;
+    inset: 0;
     justify-content: center;
-    margin: auto;
-    max-width: 560px;
+    margin: 0 auto;
+    max-width: 596px;
+    overflow-y: auto;
     padding: 30px 18px;
+    position: absolute;
     text-align: center;
     transition: opacity var(--chat-motion-panel) ease, transform var(--chat-motion-panel) var(--chat-motion-ease);
     width: 100%;
+    z-index: 1;
+}
+
+/* The welcome view is an empty-state layer and must never share the chat canvas with messages. */
+.block_kika_chat .openai-chat-body.has-messages .openai-welcome-container,
+.block_kika_chat .openai-chat-body:has(#kika_chat_log > .openai_message) .openai-welcome-container {
+    display: none !important;
 }
 
 .block_kika_chat .openai-welcome-container::before {

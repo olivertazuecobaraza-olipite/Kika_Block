@@ -130,7 +130,7 @@ class block_kika_chat extends block_base {
                         </div>
                         <div class="openai-chat-header-info">
                             <span class="openai-chat-assistant-name">' . $assistantname . '</span>
-                            <span class="openai-chat-status"><span class="status-dot"></span>En linea</span>
+                            <span class="openai-chat-status"><span class="status-dot"></span>En línea</span>
                         </div>
                     </div>
                     <div class="openai-chat-header-actions">
@@ -152,7 +152,7 @@ class block_kika_chat extends block_base {
                         <div class="kika-conversation-panel-content">
                             <div id="kika_conversation_status" class="kika-conversation-status" role="status" aria-live="polite"></div>
                             <div id="kika_conversation_list" class="kika-conversation-list"></div>
-                            <button id="kika_new_conversation" class="kika-panel-btn" title="Nueva conversacion" type="button" aria-label="Nueva conversacion">+</button>
+                            <button id="kika_new_conversation" class="kika-panel-btn" title="Nueva conversación" type="button" aria-label="Nueva conversación">+</button>
                         </div>
                     </aside>
                     <button class="kika-conversation-scrim" type="button" aria-label="Cerrar conversaciones" aria-hidden="true" tabindex="-1"></button>
@@ -160,7 +160,7 @@ class block_kika_chat extends block_base {
                     <div class="openai-chat-body">
                         <div id="kika_chat_log" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Mensajes del chat"></div>
                         <div id="welcome-message" class="openai-welcome-container">
-                            <h2 id="help-text">En que puedo ayudarte?</h2>
+                            <h2 id="help-text">¿En qué puedo ayudarte?</h2>
                             ' . $quickbuttonshtml . '
                         </div>
                     </div>

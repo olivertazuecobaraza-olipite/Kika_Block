@@ -21,18 +21,18 @@
     <input type='hidden' name='courseid' value='{{courseid}}' />
     <div class='report_container'>
         <div style='display: flex; flex-direction: column'>
-            <label for='user'>Search by user name</label>
-            <input name='user' type='text' value='{{user}}' placeholder='User name'/>
+            <label for='user'>Buscar por nombre de usuario</label>
+            <input id='user' name='user' type='text' value='{{user}}' placeholder='Nombre de usuario'/>
         </div>
         <div style='display: flex; flex-direction: column'>
-            <label for='starttime'>Start time</label>
-            <input type='datetime-local' name='starttime' value='{{starttime}}' />
+            <label for='starttime'>Fecha de inicio</label>
+            <input id='starttime' type='datetime-local' name='starttime' value='{{starttime}}' />
         </div>
         <div style='display: flex; flex-direction: column'>
-            <label for='endtime'>End time</label>
-            <input type='datetime-local' name='endtime' value='{{endtime}}' />
+            <label for='endtime'>Fecha de fin</label>
+            <input id='endtime' type='datetime-local' name='endtime' value='{{endtime}}' />
         </div>
     </div>
-    <button class='btn btn-primary' type='submit'>Search</button>
+    <button class='btn btn-primary' type='submit'>Buscar</button>
 </form>
 <br />
