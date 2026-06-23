@@ -87,7 +87,7 @@ let state = {
     conversationLoadController: null,
     conversationListRequestId: 0,
     textareaFrame: null,
-    scrollFrame: null,
+    scrollController: null,
     welcomeTimer: null,
     welcomeFrame: null,
     menuTimer: null,
@@ -248,7 +248,7 @@ export const init = (data) => {
         conversationLoadController: null,
         conversationListRequestId: 0,
         textareaFrame: null,
-        scrollFrame: null,
+        scrollController: null,
         welcomeTimer: null,
         welcomeFrame: null,
         menuTimer: null,
@@ -266,6 +266,7 @@ export const init = (data) => {
     bindInputHandlers(root);
     bindHeaderHandlers(root);
     initButtonHandlers(root);
+    initChatScroll(root);
     setChatHasMessages(!!root.querySelector('#kika_chat_log > .openai_message'), root);
     loadStrings();
     refreshConversationList(true, root);
@@ -467,7 +468,7 @@ const sendCurrentInput = (root = document) => {
     const useWebSearch = webSearch ? webSearch.checked : false;
 
     hideWelcome(false, root);
-    addToChatLog('user', escapeHtml(value), root);
+    addToChatLog('user', escapeHtml(value), root, {}, {forceFollow: true});
     createCompletion(value, useWebSearch, root);
     inputField.value = '';
     inputField.style.height = 'auto';
@@ -1297,10 +1298,12 @@ const setConversationStatus = (message, root = document) => {
     }
 };
 
-const showFrontendError = (error, root = document) => {
+const showFrontendError = (error, root = document, replaceLoading = false) => {
     const message = getFrontendErrorMessage(error);
     setConversationStatus(message, root);
-    addToChatLog('bot error', escapeHtml(message), root);
+    if (!replaceLoading || !replaceLoadingMessage('bot error', escapeHtml(message), root)) {
+        addToChatLog('bot error', escapeHtml(message), root);
+    }
     return message;
 };
 
@@ -1399,6 +1402,7 @@ const createRemoteConversation = (root = document, options = {}) => {
             persistActiveConversation();
             if (resetChat) {
                 root.querySelector('#kika_chat_log').innerHTML = '';
+                resetChatScroll(root);
                 showWelcome(root);
             }
             state.conversations = [
@@ -1435,6 +1439,7 @@ const resetLocalConversation = (root = document) => {
     clearActiveConversation();
     setConversationStatus('', root);
     root.querySelector('#kika_chat_log').innerHTML = '';
+    resetChatScroll(root);
     showWelcome(root);
     renderConversationList(root);
     const input = root.querySelector('#openai_input');
@@ -1497,14 +1502,212 @@ const deleteConversation = (conversation, root = document) => {
         .catch((error) => showFrontendError(error, root));
 };
 
-const addToChatLog = (type, message, root = document, metadata = {}) => {
+const CHAT_END_THRESHOLD = 64;
+const CHAT_SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
+
+const getChatScrollController = (root = document) => {
+    activateRoot(root);
+    return state.scrollController;
+};
+
+const getChatEnd = (container) => Math.max(0, container.scrollHeight - container.clientHeight);
+
+const isNearChatEnd = (container) => getChatEnd(container) - container.scrollTop <= CHAT_END_THRESHOLD;
+
+const updateChatScrollUi = (root = document) => {
+    const controller = getChatScrollController(root);
+    if (!controller) return;
+    const {container, button} = controller;
+    controller.isAtBottom = isNearChatEnd(container);
+    controller.lastScrollTop = container.scrollTop;
+    if (controller.isAtBottom) {
+        controller.followMode = true;
+        controller.hasNewContent = false;
+    }
+    if (!button) return;
+    const visible = !controller.isAtBottom;
+    button.classList.toggle('is-visible', visible);
+    button.classList.toggle('has-new-content', controller.hasNewContent);
+    button.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    button.setAttribute('tabindex', visible ? '0' : '-1');
+    button.setAttribute('aria-label', controller.hasNewContent
+        ? 'Ir al último mensaje, hay contenido nuevo'
+        : 'Ir al último mensaje');
+};
+
+const scheduleChatScrollUi = (root = document) => {
+    const controller = getChatScrollController(root);
+    if (!controller || controller.uiFrame) return;
+    controller.uiFrame = window.requestAnimationFrame(() => {
+        controller.uiFrame = null;
+        updateChatScrollUi(root);
+    });
+};
+
+const cancelChatScroll = (root = document, userInitiated = false) => {
+    const controller = getChatScrollController(root);
+    if (!controller) return;
+    if (controller.animationFrame) {
+        window.cancelAnimationFrame(controller.animationFrame);
+        controller.animationFrame = null;
+    }
+    if (userInitiated) controller.followMode = false;
+    scheduleChatScrollUi(root);
+};
+
+const scrollChatToEnd = (root = document, smooth = true, callback = null) => {
+    const controller = getChatScrollController(root);
+    if (!controller) {
+        if (callback) callback();
+        return;
+    }
+    const {container} = controller;
+    cancelChatScroll(root);
+    controller.followMode = true;
+    controller.hasNewContent = false;
+    const startTop = container.scrollTop;
+    const initialDistance = Math.abs(getChatEnd(container) - startTop);
+
+    if (!smooth || prefersReducedMotion() || initialDistance < 2) {
+        container.scrollTop = getChatEnd(container);
+        updateChatScrollUi(root);
+        if (callback) callback();
+        return;
+    }
+
+    const duration = Math.min(420, Math.max(180, 180 + initialDistance * 0.18));
+    const startTime = performance.now();
+    const step = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const destination = getChatEnd(container);
+        container.scrollTop = startTop + (destination - startTop) * eased;
+        if (progress < 1 && controller.followMode) {
+            controller.animationFrame = window.requestAnimationFrame(step);
+            return;
+        }
+        controller.animationFrame = null;
+        if (controller.followMode) container.scrollTop = getChatEnd(container);
+        updateChatScrollUi(root);
+        if (callback) callback();
+    };
+    controller.animationFrame = window.requestAnimationFrame(step);
+};
+
+const resetChatScroll = (root = document) => {
+    const controller = getChatScrollController(root);
+    if (!controller) return;
+    cancelChatScroll(root);
+    controller.followMode = true;
+    controller.hasNewContent = false;
+    controller.container.scrollTop = 0;
+    updateChatScrollUi(root);
+};
+
+const initChatScroll = (root = document) => {
+    activateRoot(root);
+    const container = root.querySelector('#kika_chat_log');
+    if (!container || state.scrollController) return;
+    const controller = {
+        container,
+        button: root.querySelector('#kika_scroll_to_bottom'),
+        isAtBottom: true,
+        followMode: true,
+        hasNewContent: false,
+        animationFrame: null,
+        uiFrame: null,
+        resizeFrame: null,
+        resizeObserver: null,
+        mutationObserver: null,
+        lastScrollTop: container.scrollTop
+    };
+    state.scrollController = controller;
+
+    container.addEventListener('scroll', () => scheduleChatScrollUi(root), {passive: true});
+    const stopFollowing = () => cancelChatScroll(root, true);
+    container.addEventListener('wheel', (event) => {
+        if (event.deltaY < 0 || !isNearChatEnd(container)) stopFollowing();
+    }, {passive: true});
+    container.addEventListener('touchmove', stopFollowing, {passive: true});
+    container.addEventListener('pointerdown', (event) => {
+        const bounds = container.getBoundingClientRect();
+        if (event.clientX >= bounds.right - 18) stopFollowing();
+    }, {passive: true});
+    container.addEventListener('keydown', (event) => {
+        if (!CHAT_SCROLL_KEYS.has(event.key)) return;
+        const movesUp = event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home' ||
+            (event.key === ' ' && event.shiftKey);
+        if (movesUp || !isNearChatEnd(container)) stopFollowing();
+    });
+
+    if (controller.button) {
+        controller.button.addEventListener('click', () => scrollChatToEnd(root, true));
+    }
+
+    if (window.ResizeObserver) {
+        controller.resizeObserver = new ResizeObserver(() => {
+            if (controller.resizeFrame || !controller.followMode || controller.animationFrame) return;
+            controller.resizeFrame = window.requestAnimationFrame(() => {
+                controller.resizeFrame = null;
+                if (controller.followMode) scrollChatToEnd(root, false);
+            });
+        });
+        container.querySelectorAll('.openai_message').forEach((message) => controller.resizeObserver.observe(message));
+    }
+    if (window.MutationObserver) {
+        controller.mutationObserver = new MutationObserver((mutations) => {
+            if (controller.resizeObserver) {
+                mutations.forEach((mutation) => {
+                    mutation.removedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE && node.matches('.openai_message')) {
+                            controller.resizeObserver.unobserve(node);
+                        }
+                    });
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE && node.matches('.openai_message')) {
+                            controller.resizeObserver.observe(node);
+                        }
+                    });
+                });
+            }
+            scheduleChatScrollUi(root);
+        });
+        controller.mutationObserver.observe(container, {childList: true});
+    }
+    updateChatScrollUi(root);
+};
+
+const addToChatLog = (type, message, root = document, metadata = {}, options = {}) => {
     hideWelcome(true, root);
     const messageContainer = root.querySelector('#kika_chat_log');
     if (!messageContainer) return;
 
-    const shouldFollow = isNearChatEnd(messageContainer);
+    const controller = getChatScrollController(root);
+    const shouldFollow = options.forceFollow || !controller || controller.followMode;
     messageContainer.appendChild(buildMessageElement(type, message, metadata));
-    if (shouldFollow) scheduleChatScroll(messageContainer, root, !prefersReducedMotion());
+    if (shouldFollow) {
+        scrollChatToEnd(root, !prefersReducedMotion());
+    } else if (controller) {
+        controller.hasNewContent = true;
+        updateChatScrollUi(root);
+    }
+};
+
+const replaceLoadingMessage = (type, message, root = document, metadata = {}) => {
+    const messageContainer = root.querySelector('#kika_chat_log');
+    if (!messageContainer) return false;
+    const loading = messageContainer.querySelector('.openai_message.loading');
+    if (!loading) return false;
+    const controller = getChatScrollController(root);
+    const shouldFollow = !controller || controller.followMode;
+    loading.replaceWith(buildMessageElement(type, message, metadata));
+    if (shouldFollow) {
+        scrollChatToEnd(root, !prefersReducedMotion());
+    } else if (controller) {
+        controller.hasNewContent = true;
+        updateChatScrollUi(root);
+    }
+    return true;
 };
 
 const renderChatHistory = (messages, root = document) => {
@@ -1520,23 +1723,7 @@ const renderChatHistory = (messages, root = document) => {
     messageContainer.classList.add('restoring-history');
     messageContainer.replaceChildren(fragment);
     setChatHasMessages(messageContainer.childElementCount > 0, root);
-    scheduleChatScroll(messageContainer, root, false, () => messageContainer.classList.remove('restoring-history'));
-};
-
-const isNearChatEnd = (container) => container.scrollHeight - container.scrollTop - container.clientHeight < 80;
-
-const scheduleChatScroll = (container, root, smooth = false, callback = null) => {
-    activateRoot(root);
-    const rootState = state;
-    if (rootState.scrollFrame) window.cancelAnimationFrame(rootState.scrollFrame);
-    rootState.scrollFrame = window.requestAnimationFrame(() => {
-        container.scrollTo({
-            top: container.scrollHeight,
-            behavior: smooth ? 'smooth' : 'auto'
-        });
-        rootState.scrollFrame = null;
-        if (callback) callback();
-    });
+    scrollChatToEnd(root, false, () => messageContainer.classList.remove('restoring-history'));
 };
 
 const buildMessageElement = (type, message, metadata = {}, animate = true) => {
@@ -1648,19 +1835,15 @@ const createCompletion = (message, webSearch = false, root = document) => {
             web_search: webSearch
         })
     })
-        .then((response) => {
-            activateRoot(root);
-            removeLoadingMessage(root);
-            return getJson(response);
-        })
+        .then(getJson)
         .then((data) => {
             activateRoot(root);
             state.conversationId = data.conversation_id;
             persistActiveConversation();
             if (data.message) {
-                addToChatLog('bot', data.message, root, data);
+                replaceLoadingMessage('bot', data.message, root, data);
             } else {
-                showFrontendError(new Error('La respuesta recibida está vacía.'), root);
+                showFrontendError(new Error('La respuesta recibida está vacía.'), root, true);
             }
             refreshConversationList(false, root);
             setSendingState(false, root);
@@ -1670,9 +1853,8 @@ const createCompletion = (message, webSearch = false, root = document) => {
         })
         .catch((error) => {
             activateRoot(root);
-            removeLoadingMessage(root);
             setSendingState(false, root);
-            const errorMessage = showFrontendError(error, root);
+            const errorMessage = showFrontendError(error, root, true);
             if (input) {
                 input.classList.add('error');
                 input.placeholder = errorMessage;
@@ -1705,7 +1887,7 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
             }
             state.conversationId = conversationId;
             persistActiveConversation();
-            addToChatLog('user', escapeHtml(userMessage), root);
+            addToChatLog('user', escapeHtml(userMessage), root, {}, {forceFollow: true});
             addToChatLog('bot loading', '', root);
             return fetch(apiUrl(endpoint), {
                 method: 'POST',
@@ -1726,9 +1908,9 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
             persistActiveConversation();
             const answer = data.respuesta || data.message || '';
             if (answer) {
-                addToChatLog('bot', answer, root, data);
+                replaceLoadingMessage('bot', answer, root, data);
             } else {
-                showFrontendError(new Error('La respuesta recibida está vacía.'), root);
+                showFrontendError(new Error('La respuesta recibida está vacía.'), root, true);
             }
             refreshConversationList(false, root);
             if (input) {
@@ -1737,7 +1919,7 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
         })
         .catch((error) => {
             activateRoot(root);
-            const errorMessage = showFrontendError(error, root);
+            const errorMessage = showFrontendError(error, root, true);
             if (input) {
                 input.classList.add('error');
                 input.placeholder = errorMessage;
@@ -1749,16 +1931,8 @@ const createGenerator = (endpoint, payload, userMessage, root = document) => {
         })
         .finally(() => {
             activateRoot(root);
-            removeLoadingMessage(root);
             setSendingState(false, root);
         });
-};
-
-const removeLoadingMessage = (root = document) => {
-    let messageContainer = root.querySelector('#kika_chat_log');
-    if (messageContainer) {
-        messageContainer.querySelectorAll('.openai_message.loading').forEach((message) => message.remove());
-    }
 };
 
 const escapeHtml = (value) => {

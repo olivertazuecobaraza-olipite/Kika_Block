@@ -12,8 +12,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'block_kika_chat';
-$plugin->version = 2026060204;
+$plugin->version = 2026062300;
 $plugin->requires = 2022041600;
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = '36.0.4-kika-visible-errors-everywhere';
+$plugin->release = '36.1.0-kika-smooth-chat-scroll';
 ?>

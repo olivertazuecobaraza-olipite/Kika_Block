@@ -158,7 +158,13 @@ class block_kika_chat extends block_base {
                     <button class="kika-conversation-scrim" type="button" aria-label="Cerrar conversaciones" aria-hidden="true" tabindex="-1"></button>
 
                     <div class="openai-chat-body">
-                        <div id="kika_chat_log" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Mensajes del chat"></div>
+                        <div id="kika_chat_log" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Mensajes del chat" tabindex="0"></div>
+                        <button id="kika_scroll_to_bottom" class="kika-scroll-to-bottom" type="button" aria-label="Ir al último mensaje" aria-hidden="true" tabindex="-1">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                            <span class="kika-scroll-new-indicator" aria-hidden="true"></span>
+                        </button>
                         <div id="welcome-message" class="openai-welcome-container">
                             <h2 id="help-text">¿En qué puedo ayudarte?</h2>
                             ' . $quickbuttonshtml . '
