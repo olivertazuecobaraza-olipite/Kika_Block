@@ -2,7 +2,7 @@
 
 Bloque de Moodle que integra un chat asistente con `KIKA_API`. El plugin muestra una interfaz de chat dentro del curso, permite mantener conversaciones por usuario y curso, y envia las peticiones al backend mediante endpoints PHP del servidor Moodle.
 
-La licencia JWT de `KIKA_API` se configura desde la administracion global de Moodle o desde el entorno del servidor y nunca se expone al navegador.
+Para el funcionamiento correcto del plugin se necesita configurar el token de la API de `KIKA_API`.
 
 ## Caracteristicas
 
@@ -22,7 +22,7 @@ La licencia JWT de `KIKA_API` se configura desde la administracion global de Moo
 - Moodle `4.0` o superior.
 - PHP compatible con la version de Moodle instalada.
 - Servicio `KIKA_API` accesible desde el servidor Moodle.
-- Una licencia JWT valida de `KIKA_API`.
+- Un token de API valido de `KIKA_API`.
 - Un identificador de vector store de Qdrant para cada instancia del bloque.
 
 ## Instalacion
@@ -43,15 +43,15 @@ La licencia JWT de `KIKA_API` se configura desde la administracion global de Moo
 
 4. Ejecuta la instalacion o actualizacion del plugin cuando Moodle lo solicite.
 
-5. Configura la URL y el JWT desde los ajustes globales del bloque.
+5. Configura la URL y el token de API desde los ajustes globales del bloque.
 
 ## Configuracion global
 
 Desde `Administracion del sitio > Extensiones > Bloques > KIKA_CHAT Block`, configura:
 
 - `KIKA_API URL`: URL base completa, por ejemplo `https://api.example.com/api/tutor`.
-- `KIKA_API JWT token`: JWT comercial usado por Moodle.
-- `KIKA_API license configured`: indica `yes` o `no`, sin mostrar el JWT.
+- `KIKA_API JWT token`: token de API necesario para el funcionamiento correcto del plugin.
+- `KIKA_API license configured`: indica `yes` o `no`, sin mostrar el token de API.
 - `Assistant name`: nombre mostrado para el asistente. Por defecto, `Kika`.
 - `User name`: etiqueta mostrada para el usuario.
 - `Enable logging`: guarda mensajes y respuestas en la tabla de logs del plugin.
@@ -61,12 +61,12 @@ Como alternativa avanzada, se aceptan variables de entorno o constantes definida
 
 ```env
 KIKA_API_URL=https://api.example.com/api/tutor
-KIKA_API_TOKEN=<jwt_comercial>
+KIKA_API_TOKEN=<token_api>
 ```
 
-Estas tienen prioridad sobre los valores editables. Para instalaciones con requisitos de seguridad estrictos, usa esta alternativa: los valores editables se guardan en la configuracion global de Moodle. Nunca guardes el JWT en JavaScript, HTML, logs ni Git.
+Estas tienen prioridad sobre los valores editables. Para instalaciones con requisitos de seguridad estrictos, usa esta alternativa: los valores editables se guardan en la configuracion global de Moodle.
 
-La URL configurada debe ser la URL real accesible desde el servidor Moodle y debe incluir el prefijo `/api/tutor`. `localhost` solo es valido si el backend corre en el mismo servidor que Moodle durante desarrollo. El token legacy `api_key` no se usa: todas las llamadas externas se autorizan con `Authorization: Bearer <JWT>`.
+La URL configurada debe ser la URL real accesible desde el servidor Moodle y debe incluir el prefijo `/api/tutor`. `localhost` solo es valido si el backend corre en el mismo servidor que Moodle durante desarrollo. El token legacy `api_key` no se usa: todas las llamadas externas se autorizan con `Authorization: Bearer <token_api>`.
 
 ## Configuracion del bloque en un curso
 
@@ -89,7 +89,7 @@ El plugin deriva y envia los siguientes datos:
 - `vs_id_QDRANT`: identificador Qdrant configurado en la instancia.
 - `instructions`: instrucciones del tutor con el curso interpolado y el marcador `{context}` para que `KIKA_API` inserte el contexto oficial recuperado.
 - `x-user-id`: ID numerico estable de Moodle, con formato `(string) $USER->id`.
-- `Authorization: Bearer <jwt>`: licencia leida exclusivamente en el servidor.
+- `Authorization: Bearer <token_api>`: token de API necesario para el funcionamiento correcto.
 
 ## Flujo de conversaciones
 
@@ -100,7 +100,7 @@ El navegador llama a endpoints locales del plugin:
 - `api/conversation_messages.php`: carga los mensajes de una conversacion.
 - `api/conversation.php`: renombra o elimina una conversacion.
 
-Estos endpoints establecen el contexto de pagina, validan la sesion mediante `require_login()`, validan curso y `sesskey`, y actuan como proxy hacia `KIKA_API`. No exponen el JWT al navegador. Suponiendo que `KIKA_API_URL` termina en `/api/tutor`, llaman a:
+Estos endpoints establecen el contexto de pagina, validan la sesion mediante `require_login()`, validan curso y `sesskey`, y actuan como proxy hacia `KIKA_API`. Suponiendo que `KIKA_API_URL` termina en `/api/tutor`, llaman a:
 
 - `POST /api/tutor/conversations`
 - `GET /api/tutor/conversations?course_id=...`
@@ -167,7 +167,7 @@ kika_chat/
 
 ## Seguridad
 
-- El JWT de `KIKA_API` no se envia al cliente.
+- Se requiere el token de API de `KIKA_API` para el funcionamiento correcto del plugin.
 - Las peticiones externas salen desde PHP en el servidor Moodle.
 - El bloque valida configuracion obligatoria antes de habilitar el chat.
 - El uso del chat requiere un usuario autenticado con acceso al curso.
@@ -177,8 +177,8 @@ kika_chat/
 
 ## Renovacion de licencia
 
-1. Emite el JWT nuevo y revoca o sustituye el anterior.
-2. Actualiza `KIKA_API JWT token` desde los ajustes globales del bloque.
+1. Emite el token de API nuevo y revoca o sustituye el anterior.
+2. Actualiza el token de API desde los ajustes globales del bloque.
 3. Guarda los cambios.
 4. Verifica que crear, enviar, listar, abrir, renombrar y borrar conversaciones sigue funcionando.
 
@@ -192,7 +192,7 @@ Flujo actual:
 Navegador -> endpoints PHP locales de Moodle -> KIKA_API -> MongoDB
 ```
 
-- El navegador no recibe el JWT, la cabecera `Authorization` ni `KIKA_API_URL`.
+- La integracion requiere que `KIKA_API_TOKEN` este configurado correctamente.
 - No existe llamada directa desde JavaScript a `KIKA_API`.
 - Se usan conversaciones con memoria para crear, listar, abrir historial, enviar, renombrar y borrar.
 - No existe flujo legacy `/ask`.
